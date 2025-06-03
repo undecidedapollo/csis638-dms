@@ -13,7 +13,7 @@ export interface DefinitionNode {
 export interface DefinitionPropertyNode {
     type: "DefinitionProperty";
     identifier: IdentifierNode;
-    definition: TypeExprNode;
+    definition: ASTNode;
 }
 
 export interface DefinitionFunctionNode {
@@ -26,7 +26,7 @@ export interface DefinitionFunctionNode {
 export interface ParamNode {
     type: "Param";
     identifier: IdentifierNode;
-    definition: TypeExprNode | null;
+    definition: TypeExprNode | ContextNode | null;
 }
 
 /** -----------------------------
@@ -122,7 +122,7 @@ export interface IdentifierNode {
 
 export interface ContextNode {
     type: "context";
-    value: "$";
+    value: IdentifierNode | null;
 }
 
 export interface ParenthesisNode {

@@ -69,7 +69,7 @@ Numeric
   = val:$([0-9]+([.][0-9])?) {return {type: "number", value: val};}
 
 Context
-  = [$] { return {type: "context", value: "$"};}
+  = [$] ident:Identifier? { return {type: "context", value: ident};}
 
 Expr
   = ReturnExpr

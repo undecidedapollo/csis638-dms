@@ -53,8 +53,8 @@ function getNested(ast) {
 }
 
 function diffAst(astBefore, astAfter) {
-    const added = [];
-    const removed = [];
+    const added: any[] = [];
+    const removed: any[] = [];
     // const changed = [];
 
     const beforeMap = keyBy(astBefore, (x) => getName(x));

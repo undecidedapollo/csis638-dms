@@ -6,9 +6,11 @@ const input = `
         id: uuid,
         bankAccountId: string,
         amount: number,
-        doubleAmount: $.amount * 2
+        doubleAmount: (row: $row, rand: number) => row.amount * 2 + rand + testing((x) => x * 2)
     }
 `;
+
+
 // const input = `
 //     BankAccount { 
 //         accountId: string,
@@ -30,7 +32,7 @@ const input = `
 //         get(accountId: string) {
 //             return BankAccount[].first((b) => b.accountId == accountId)
 //         }
-        
+
 //         create(accountId: string) {
 //             return BankAccount[].create({
 //                 accountId,
@@ -75,40 +77,64 @@ function getIdentifierName(ast: IdentifiesNode) {
 }
 
 class Context {
-    symbols: Map<string, {node: ASTNode, child: Context}> = new Map();
+    symbols: Map<string, { node: ASTNode, child: Context }> = new Map();
+    mapping: Map<ASTNode, { name: string, context: Context }> = new Map();
 
-    constructor(private readonly parent?: Context) {}
+    constructor(private readonly parent?: Context) { }
 
-    public findSymbol(name: string): boolean {
+    public findByName(name: string): { node: ASTNode, context: Context } | null {
         const current = this.symbols.get(name);
         if (!current && this.parent) {
-            return this.parent.findSymbol(name);
+            return this.parent.findByName(name);
+        } else if (!current) {
+            return null;
         }
-        return !!current;
+        return { node: current.node, context: current.child };
     }
 
-    public addSymbol(node: IdentifiesNode): {child: Context} {
+    public findByAST(ast: ASTNode): { name: string, context: Context } | null {
+        const current = this.mapping.get(ast);
+        if (!current && this.parent) {
+            return this.parent.findByAST(ast);
+        } else if (!current) {
+            return null;
+        }
+        return { name: current.name, context: current.context };
+    }
+
+    private recordASTReference(node: ASTNode, name: string, context: Context) {
+        if (this.parent) {
+            return this.parent.recordASTReference(node, name, context);
+        }
+
+        if (this.mapping.has(node)) throw new Error(`Duplicate ast reference node definition at node (not sure if this is possible or not): ${JSON.stringify(node, null, 2)}`);
+        this.mapping.set(node, { name, context });
+    }
+
+    public addSymbol(node: IdentifiesNode): { child: Context } {
         const name = getIdentifierName(node);
         if (!name) throw new Error(`No name found for node: ${JSON.stringify(node, null, 2)}`);
         if (this.symbols.has(name)) throw new Error(`Duplicate node definition: "${name}" at node: ${JSON.stringify(node, null, 2)}`);
         const child = this.nested();
-        this.symbols.set(name, {node, child});
-        return {child};
+        this.symbols.set(name, { node, child });
+        this.recordASTReference(node, name, child);
+        return { child };
     }
 
-    public addAnonymous(node: ASTNode): {child: Context} {
+    public addAnonymous(node: ASTNode): { child: Context } {
         const identifier = randomUUID();
         if (this.symbols.has(identifier)) throw new Error(`Duplicate node definition: "${identifier}" at node: ${JSON.stringify(node, null, 2)}`);
         const child = this.nested();
-        this.symbols.set(identifier, {node, child});
-        return {child};
+        this.symbols.set(identifier, { node, child });
+        this.recordASTReference(node, identifier, child);
+        return { child };
     }
 
     public nested(): Context {
         return new Context(this);
     }
 
-    public tree() : any {
+    public tree(): any {
         return Object.fromEntries(Array.from(this.symbols.entries()).map(([key, x]) => [`${key}:${x.node.type}`, x.child.tree()]));
     }
 }
@@ -117,13 +143,13 @@ class Context {
 function walkDefinition(ast: DefinitionNode, context: Context) {
     const { child } = context.addSymbol(ast);
 
-    for(const prop of ast.properties) {
+    for (const prop of ast.properties) {
         walkDefinitionProperty(prop, child);
     }
 }
 
 function walkDefinitionFunction(ast: DefinitionFunctionNode, funcContext: Context) {
-    for(const param of ast.params) {
+    for (const param of ast.params) {
         funcContext.addSymbol(param)
     }
     _recordIdentifyingSymbols(ast.body, funcContext);
@@ -133,12 +159,14 @@ function walkDefinitionProperty(ast: DefinitionPropertyNode | DefinitionFunction
     const { child } = context.addSymbol(ast);
     if (ast.type === "DefinitionFunction") {
         walkDefinitionFunction(ast, child);
+    } else {
+        _recordIdentifyingSymbols(ast.definition, child);
     }
 }
 
 function walkLambdaExpression(ast: LambdaExprNode, context: Context) {
     const { child } = context.addAnonymous(ast);
-    for(const param of ast.params) {
+    for (const param of ast.params) {
         child.addSymbol(param)
     }
     _recordIdentifyingSymbols(ast.body, child);
@@ -146,7 +174,7 @@ function walkLambdaExpression(ast: LambdaExprNode, context: Context) {
 
 function walkObjectLiteralExpression(ast: ObjectLiteralExprNode, context: Context) {
     const { child } = context.addAnonymous(ast);
-    for(const prop of ast.properties) {
+    for (const prop of ast.properties) {
         _recordIdentifyingSymbols(prop, child);
     }
 }
@@ -171,7 +199,7 @@ function _recordIdentifyingSymbols(ast: ASTNode, context: Context) {
         } else if (ast.type === "LambdaExpr") {
             walkLambdaExpression(ast, context);
         } else if (ast.type === "InvokeExpr") {
-            for(const arg of ast.args) {
+            for (const arg of ast.args) {
                 _recordIdentifyingSymbols(arg, context);
             }
         } else if (ast.type === "ObjectLiteralExpr") {
@@ -186,13 +214,14 @@ function _recordIdentifyingSymbols(ast: ASTNode, context: Context) {
 }
 
 function generateIdentifyingSymbols(ast: AST, context: Context) {
-    for(const node of ast) {
+    for (const node of ast) {
         _recordIdentifyingSymbols(node, context);
     }
 }
 
 // #endregion
 
+// #region Define The Tree
 interface RDTDefinition {
     node: DefinitionNode;
     properties: Array<RDTProperty>;
@@ -207,29 +236,233 @@ interface RDTSimpleProperty {
 interface RDTDerivedProperty {
     type: "DerivedProperty";
     node: DefinitionPropertyNode;
+    derivation: RDTComputeNode;
 }
 
 type RDTProperty = RDTSimpleProperty | RDTDerivedProperty;
 
-interface RDTSourceSelf {
-    type: "RDTSourceSelf";
-    node: ASTNode; // Later convert to RDT node at a final resolver phase?
+interface RDTTypeIdentifier {
+    type: "RDTTypeIdentifier";
+    name: string;
+}
+
+interface RDTTypeUnknown {
+    type: "RDTTypeUnknown";
+}
+
+interface RDTTypeContext {
+    type: "RDTTypeContext";
+    name?: string;
+}
+
+type RDTTypeDef = RDTTypeIdentifier | RDTTypeContext | RDTTypeUnknown;
+
+interface RDTSourceContext {
+    type: "RDTSourceContext";
+    name: string;
+    typeDef: RDTTypeContext;
 }
 
 interface RDTSourceConstant {
     type: "RDTSourceConstant";
+    typeDef: RDTTypeDef;
     value: string;
 }
 
-// #region Define The Tree
+interface RDTPropertyAccess {
+    type: "RDTPropertyAccess";
+    source: RDTComputeNode;
+    propertyName: RDTComputeNode;
+}
 
-function rdtDefinitionProperty(ast: DefinitionPropertyNode | DefinitionFunctionNode, context: Context): RDTProperty {
-    if (ast.type === "DefinitionProperty") {
+interface RDTMath {
+    type: "RDTMath";
+    operator: "*" | "/" | "+" | "-";
+    lhs: RDTComputeNode;
+    rhs: RDTComputeNode;
+}
+
+interface RDTFunction {
+    type: "RDTFunction";
+    name?: string;
+    parameters: RDTComputeNode[];
+    body: RDTComputeNode;
+}
+
+interface RDTSourceRuntime {
+    type: "RDTSourceRuntime";
+    name: string;
+    typeDef: RDTTypeDef;
+}
+
+interface RDTInvoke {
+    type: "RDTInvoke";
+    source: RDTComputeNode;
+    args: RDTComputeNode[];
+}
+
+type RDTComputeNode =
+    | RDTSourceContext
+    | RDTSourceConstant
+    | RDTPropertyAccess
+    | RDTMath
+    | RDTFunction
+    | RDTSourceRuntime
+    | RDTInvoke;
+
+
+const globals: Array<RDTComputeNode> = [
+    {
+        type: "RDTFunction",
+        name: "testing",
+        parameters: [
+            {
+                type: "RDTSourceRuntime",
+                name: "fnc",
+                typeDef: {
+                    type: "RDTTypeUnknown",
+                },
+            }
+        ],
+        body: {
+            type: "RDTInvoke",
+            source: {
+                type: "RDTSourceRuntime",
+                name: "fnc",
+                typeDef: {
+                    type: "RDTTypeUnknown",
+                },
+            },
+            args: [
+                {
+                    type: "RDTSourceConstant",
+                    value: "2",
+                    typeDef: {
+                        type: "RDTTypeIdentifier",
+                        name: "number"
+                    }
+                },
+            ],
+        },
+    },
+];
+
+// What's nexts:
+// DO THE FUNCTION AND SOURCE RUNTIME STUFF
+
+function rdtDerivedPropertyWalker(ast: ASTNode): RDTComputeNode {
+    if (ast.type === "operator") {
+        if ("+-*/".includes(ast.operator)) {
+            const lhs = rdtDerivedPropertyWalker(ast.lhs);
+            const rhs = rdtDerivedPropertyWalker(ast.rhs);
+            return {
+                type: "RDTMath",
+                lhs,
+                rhs,
+                operator: ast.operator as RDTMath["operator"],
+            };
+        } else if (ast.operator === ".") {
+            const source = rdtDerivedPropertyWalker(ast.lhs);
+            const propertyName = rdtDerivedPropertyWalker(ast.rhs);
+
+            return {
+                type: "RDTPropertyAccess",
+                source,
+                propertyName,
+            };
+        }
+        else {
+            throw new Error(`RDT Operator not supported: ${ast.operator}`);
+        }
+    } else if (ast.type === "TypeExpr") {
+        if (ast.array) throw new Error("Array type expr not support rdt walker");
         return {
-            type: "SimpleProperty",
-            node: ast,
-            typeDef: "string",
+            type: "RDTSourceConstant",
+            value: ast.base.value,
+            typeDef: {
+                type: "RDTTypeIdentifier",
+                name: "string",
+            },
         };
+    } else if (ast.type === "number" || ast.type === "string") {
+        return {
+            type: "RDTSourceConstant",
+            value: ast.value,
+            typeDef: {
+                type: "RDTTypeIdentifier",
+                name: ast.type,
+            },
+        };
+    } else if (ast.type === "Param") {
+        if (ast.definition?.type === "TypeExpr") {
+            if (ast.definition?.array) throw new Error("rdt param type is array");
+            return {
+                type: "RDTSourceRuntime",
+                name: ast.identifier.value,
+                typeDef: {
+                    type: "RDTTypeIdentifier",
+                    name: ast.definition.base.value,
+                },
+            };
+        } else if (ast.definition?.type === "context") {
+            return {
+                type: "RDTSourceContext",
+                name: ast.identifier.value,
+                typeDef: {
+                    type: "RDTTypeContext",
+                    name: ast.definition.value?.value,
+                },
+            };
+        } else {
+            return {
+                type: "RDTSourceRuntime",
+                name: ast.identifier.value,
+                typeDef: {
+                    type: "RDTTypeUnknown",
+                },
+            };
+        }
+    }
+    else if (ast.type === "LambdaExpr") {
+        const parameters = ast.params.map((param) => rdtDerivedPropertyWalker(param));
+        const body = rdtDerivedPropertyWalker(ast.body);
+        return {
+            type: "RDTFunction",
+            parameters,
+            body,
+        };
+    }
+    else if (ast.type === "InvokeExpr") {
+        const source = rdtDerivedPropertyWalker(ast.lhs);
+        const args = ast.args.map((arg) => rdtDerivedPropertyWalker(arg));
+        return {
+            type: "RDTInvoke",
+            source,
+            args,
+        };
+    }
+    else {
+        throw new Error(`Unable to rdt walk for ast type: ${ast.type} node: ${JSON.stringify(ast, null, 2)}`);
+    }
+}
+
+function rdtDefinitionProperty(ast: DefinitionPropertyNode | DefinitionFunctionNode, ctx: { node: ASTNode, context: Context }): RDTProperty {
+    if (ast.type === "DefinitionProperty") {
+        if (ast.definition.type === "TypeExpr") {
+            if (ast.definition.array) throw new Error(`Table aliasing not supported, due to "${ast.definition.base.value}[]"`);
+            return {
+                type: "SimpleProperty",
+                node: ast,
+                typeDef: ast.definition.base.value,
+            };
+        } else {
+            const derivation = rdtDerivedPropertyWalker(ast.definition);
+            return {
+                type: "DerivedProperty",
+                node: ast,
+                derivation,
+            };
+        }
     } else if (ast.type === "DefinitionFunction") {
         throw new Error("Unimplemented exception");
     } else {
@@ -238,9 +471,9 @@ function rdtDefinitionProperty(ast: DefinitionPropertyNode | DefinitionFunctionN
 }
 
 function rdtDefinition(ast: DefinitionNode, context: Context): RDTDefinition {
-    const def : RDTDefinition = {node: ast, properties: []};
+    const def: RDTDefinition = { node: ast, properties: [] };
     for (const prop of ast.properties) {
-        const propDef = rdtDefinitionProperty(prop, context);
+        const propDef = rdtDefinitionProperty(prop, { context, node: ast });
         def.properties.push(propDef);
     }
     return def;
@@ -263,7 +496,7 @@ function _resolveDependencyTree(ast: ASTNode, context: Context) {
     if ("type" in ast) {
         if (ast.type === "Definition") {
             return rdtDefinition(ast, context);
-        } 
+        }
         // else if (ast.type === "ObjectLiteralProperty") {
         //     return walkObjectLiteralProperty(ast, context);
         // } else if (ast.type === "ReturnExpr") {
@@ -300,6 +533,68 @@ function resolveDependencyTree(ast: AST, context: Context) {
 }
 
 // #endregion
+
+// [
+//     {
+//       "node": "Transaction:Definition",
+//       "properties": [
+//         {
+//           "type": "SimpleProperty",
+//           "node": "id:DefinitionProperty",
+//           "typeDef": "uuid"
+//         },
+//         {
+//           "type": "SimpleProperty",
+//           "node": "bankAccountId:DefinitionProperty",
+//           "typeDef": "string"
+//         },
+//         {
+//           "type": "SimpleProperty",
+//           "node": "amount:DefinitionProperty",
+//           "typeDef": "number"
+//         },
+//         {
+//           "type": "DerivedProperty",
+//           "node": "doubleAmount:DefinitionProperty",
+//           "derivation": {
+//             "type": "RDTMath",
+//             "lhs": {
+//               "type": "RDTPropertyAccess",
+//               "source": {
+//                 "type": "RDTSourceSelf",
+//                 "node": "Transaction:Definition",
+//                 "context": {
+//                   "symbols": {}
+//                 }
+//               },
+//               "propertyName": {
+//                 "type": "RDTSourceConstant",
+//                 "value": "amount",
+//                 "typeDef": "string"
+//               }
+//             },
+//             "rhs": {
+//               "type": "RDTSourceConstant",
+//               "value": "2",
+//               "typeDef": "number"
+//             },
+//             "operator": "*"
+//           }
+//         }
+//       ]
+//     }
+//   ]
+
+//  What dependencies does it have. There are none (?? maybe), write time, and read time. Can we split the two with RDT's?
+//  Self vs. others.
+//  Build an execution of both? What would that look like?
+//  ?? Heuristic: If there are write time dependencies we should store them ??
+//  Is a function just an explicit read time dependency? If automatically specified (like current time) it could be provided.
+//  Perhaps not (now but Date.currentReadTime vs. Date.currentWriteTime)
+//  ?? Heuristic: If the result of the write time dependency graph is a full dataset, perhaps it isn't eagerly computed and instead is a join. Other architectures could optimize accordingly ??
+//  
+//  
+//  Next steps: Split the execution graph
 
 try {
     const ast: AST = parser.parse(input);
