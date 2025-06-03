@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "gen",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "label": "npm: gen",
+      "detail": "Generate parser using peggy",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

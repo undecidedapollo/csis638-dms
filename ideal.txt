@@ -1,0 +1,95 @@
+Backup {
+    transactions: $.transactions.map(${adminRetain: false}).compact({
+        $: !$.adminRetain
+        $: $.Event:createdTimestamp > Time:YearsAgo(3)
+        dryRun = true
+        trigger: Action(name:"Force Compact Transactions Backup")
+    })
+}
+
+BankAccount {
+    accountId: string unique
+
+    transactions: Transaction[].filter($.involvesAccounts().includes($.accountId))
+    flags: Flag[].filter(accountId==$.accountId)
+    activeFlags: $.flags.filter(reversed==false)
+
+    withdrawAllowed: $.activeFlags.any($ is BlockWithdrawl)
+
+    balance: number = $.transactions.ordered($.recordedTimeststamp, .asc).reduce((acc: {balance=0, transactions=0}, ev) => {
+        if (ev.Transaction:reversed) return acc;
+        acc = acc{transactions++}
+        match(ev): {
+            Type<Transfer>: {
+                if (ev.fromAccount.ref == $) {
+                    return acc{balance -= ev.amount}
+                } else {
+                    return acc{balance += ev.amount}
+                }
+            }
+            Type<Withdrawl>: acc{balance -= ev.amount}
+            Type<Deposit>: acc{balance += ev.amount}
+        }
+    })
+
+    withdraw(amount: number) : Result => {
+        if (!$.withdrawAllowed) return Error(`FlagExistsForUserAccount`);
+        return Transaction>Withdrawl.$create {
+            accountId: $.accountId
+            amount
+        };
+    }
+}
+
+Event {
+    createdTimestamp: timestamp
+    recordedTimeststamp: timestamp = $.onRecordConfirmed
+}
+
+Transaction {
+    $: $.derived is Event
+    transactionId: string unique
+    
+    involvesAccounts: BankAccount:accountId[] = [];
+    reversed: bool
+}
+
+Transaction > Transfer {
+    fromAccount: BankAccount.accountId
+    toAccount: BankAccount.accountId
+    $: fromAccount != toAccount
+
+    Transaction:involvesAccounts = [$.fromAccount, $.toAccount]
+
+    amount: number > 0
+
+    $.create {
+        $: !$.withdrawAllowed ;flags=$.withdrawAllowed.$.derivedFrom(any: Flag),errorMessage="${$.fromAccount} blocked from withdrawl due to flags ${$.flags}
+        $: $.fromAccount.balance > 0 ;errorMessage="$.fromAccount does not have available funds"
+    }
+}
+
+Transaction > Withdrawl {
+    account: BankAccount.accountId
+
+    amount: number > 0
+
+    reversed: bool default(false)
+}
+
+Transaction > Deposit {
+    account: BankAccount.accountId
+
+    amount: number > 0
+
+    reversed: bool
+}
+
+Flag {
+    $: $.derived is Event
+    accountId: BankAccount.accountId
+
+    reversed: bool
+}
+
+Flag > BlockWithdrawl {}

@@ -6,7 +6,8 @@
   "scripts": {
     "tsc": "tsc",
     "tsx": "tsx",
-    "start": "tsc --noEmit && tsx"
+    "start": "tsc --noEmit && tsx",
+    "gen": "peggy -o src/bankaccount.cjs -c peggy.config.cjs bankaccount.pegjs"
   },
   "keywords": [],
   "author": "",
@@ -16,5 +17,8 @@
     "@types/node": "^22.15.21",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "peggy": "^5.0.2"
   }
 }
