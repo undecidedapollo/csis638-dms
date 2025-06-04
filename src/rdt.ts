@@ -349,7 +349,7 @@ export function debugRDTNode(node: RDTNode) {
 
 
 
-function getTypeMetadata(node: RDTNode, createIfNotExists?: boolean) : RDTTypeDef | undefined {
+export function getTypeMetadata(node: RDTNode, createIfNotExists?: boolean) : RDTTypeDef | undefined {
     let res = node.metadata["typeinfo"];
     if (res || !createIfNotExists) return res; 
     res = {};
@@ -362,7 +362,7 @@ function rdtIsNumber(node: RDTNode): boolean{
     return typeData?.type === "RDTTypeIdentifier" && typeData.name === "number";
 }
 
-function rdtIsNotKnown(node: RDTNode): boolean{
+export function rdtIsNotKnown(node: RDTNode): boolean{
     const typeData = getTypeMetadata(node);
     return !typeData || typeData.type === "RDTTypeUnknown";
 }
