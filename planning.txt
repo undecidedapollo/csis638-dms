@@ -15,12 +15,12 @@ USE dbapp;
 
 // Loop through the table definition and generate the string from the ast
 // ?? In the future build out an update system like terraform perhaps where it does diffs and knows how to do different types of changes ??
-CREATE TABLE "Transaction" {
-    "id" UUID NOT NULL,
+CREATE TABLE "Transaction" (
+    "id" TEXT NOT NULL,
     "bankAccountId" TEXT NOT NULL,
     "amount" FLOAT NOT NULL,
-    "doubleAmount_int_1" FLOAT NOT NULL
-}
+    "doubleAmount_int_0" FLOAT NOT NULL
+)
 
 
 

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { AST } from './ast.types';
 import parser from './bankaccount.cjs';
-import { RDTContext, RDTNode, RDTRoot, RDTRWRoot } from './rdt.types';
+import { RDTContext, RDTDerivedProperty, RDTNode, RDTRoot, RDTRWRoot } from './rdt.types';
 import { convertToRDT, debugRDTNode, genRdtId, replacer, resolveTypes, walkDFS } from './rdt';
 import { generateSDK } from './genSDK';
 import fs from "node:fs";
@@ -29,6 +29,15 @@ const input = `
 //     }
 // `;
 
+function getIntermediateId(node: RDTDerivedProperty): string {
+    if (!node.metadata["intermediateidincr"]) {
+        node.metadata["intermediateidincr"] = 0;
+    }
+
+    const count = (node.metadata["intermediateidincr"]++).toString();
+
+    return `${node.node.identifier.value}_int_${count}`;
+}
 
 try {
     const ast: AST = parser.parse(input);
@@ -92,6 +101,7 @@ try {
             console.log(ctx.node.type, ctx.lineage.length, !!ctx.node.rdtContext);
             // This runs at the bottom every time, doesn't matter if in before or after.
             if (ctx.node.type === "RDTSourceRuntime" || ctx.node.type === "SimpleProperty") {
+                // TODO: NOOP ??
             } else if (!tainted.has(ctx.node.id)) {
                 const [parent] = ctx.lineage;
                 if (tainted.has(parent.id)) {
@@ -101,7 +111,7 @@ try {
                         console.log(debugRDTNode(ctx.node), debugRDTNode(parent));
                         throw new Error(`Unable to find root for read / write separation`);
                     }
-                    const referenceId = genRdtId();
+                    const referenceId = getIntermediateId(grandparent);
                     writeAst.set(grandparent.id, {
                         write: {
                             [referenceId]: ctx.node,

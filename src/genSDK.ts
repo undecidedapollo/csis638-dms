@@ -56,43 +56,44 @@ function toTypescriptLogic(rdt: RDTNode): string {
 }
 
 function generateDefinition(rdt: RDTDefinition): string {
-    const sharedProperties: string[] = [];
+    const sharedProperties: Record<string, string> = {};
     const sharedTransforms: string[] = [];
     const variations: {
-        simpleOnlyProps: string[],
+        simpleOnlyProps: Record<string, string>,
         simpleOnlyTransforms: string[],
-        dbReprProps: string[],
+        dbReprProps: Record<string, string>,
         dbReprTransforms: string[],
-        liveReprProps: string[],
+        liveReprProps: Record<string, string>,
         liveReprTransforms: string[],
     } = {
-        simpleOnlyProps: [],
+        simpleOnlyProps: {},
         simpleOnlyTransforms: [],
-        dbReprProps: [],
+        dbReprProps: {},
         dbReprTransforms: [],
-        liveReprProps: [],
+        liveReprProps: {},
         liveReprTransforms: [],
     };
 
     for (const prop of rdt.properties) {
         if (prop.type === "SimpleProperty") {
-            sharedProperties.push(`${escapeKey(prop.node.identifier.value)}: ${prop.typeDef};`)
+            sharedProperties[prop.node.identifier.value] = prop.typeDef;
+            // sharedProperties.push(`${escapeKey()}: ${prop.typeDef};`)
             sharedTransforms.push(`${escapeKey(prop.node.identifier.value)}: input[${escapeKey(prop.node.identifier.value)}],`);
         } else if (prop.type === "DerivedProperty" && prop.derivation.type === "RDTRWRoot") {
-            const intermediateFields = Object.entries(prop.derivation.write).map(([name, rdt]) => {
+            const intermediateProps = Object.fromEntries(Object.entries(prop.derivation.write).map(([name, rdt]) => {
                 if (rdtIsNotKnown(rdt)) throw new Error(`Unknown type metadata for write intermediate: ${name} as part of node: ${JSON.stringify(prop, replacer, 2)}`);
                 const typeMetadata = getTypeMetadata(rdt)!;
-                return `${escapeKey(name)}: ${toTypescriptType(typeMetadata)};`;
-            });
+                return [name, toTypescriptType(typeMetadata)];
+            }));
             const intermediateTransforms = Object.entries(prop.derivation.write).map(([name, rdt]) => {
                 return `${escapeKey(name)}: ${toTypescriptLogic(rdt as RDTComputeNode)},`;
             });
-            variations.dbReprProps.push(...intermediateFields);
+            Object.assign(variations.dbReprProps, intermediateProps);
             variations.dbReprTransforms.push(...intermediateTransforms);
 
             if (rdtIsNotKnown(prop.derivation.read)) throw new Error(`Unknown type metadata for read result as part of node: ${JSON.stringify(prop.derivation.read, replacer, 2)}`);
             const readTypeMetadata = getTypeMetadata(prop.derivation.read)!;
-            variations.liveReprProps.push(`${prop.node.identifier.value}: ${toTypescriptType(readTypeMetadata)}`);
+            variations.liveReprProps[prop.node.identifier.value] = toTypescriptType(readTypeMetadata);
             variations.liveReprTransforms.push(`${escapeKey(prop.node.identifier.value)}: ${toTypescriptLogic(prop.derivation.read as RDTComputeNode)},`);
         } else if (prop.type === "DerivedProperty") {
             // ?? This case can happen if all the work required for a derived property is on the write side ??
@@ -100,20 +101,35 @@ function generateDefinition(rdt: RDTDefinition): string {
         }
     }
 
+    function writeASql() {
+        const fields = Object.keys(sharedProperties).concat(Object.keys(variations.dbReprProps)).map((x) => escapeKey(x));
+        const fieldNumbers = fields.map((_, i) => `$${i + 1}`);
+        const paramArray = fields.map((propName) => `db_row[${propName}]`);
+
+        return `await pool.query(
+            'INSERT INTO "${rdt.node.name.value}" (${fields.join(", ")}) VALUES (${fieldNumbers.join(", ")}) RETURNING *',
+            [${paramArray.join(", ")}]
+        );`;
+    }
+
+    function fromMapToInterface(map: Record<string, string>) {
+        return Object.entries(map).map(([key, type]) => `${escapeKey(key)}: ${type};`).join("\n");
+    }
+
     return `
         export interface ${rdt.node.name.value}_simple {
-            ${sharedProperties.join("\n")}
-            ${variations.simpleOnlyProps.join("\n")}
+            ${fromMapToInterface(sharedProperties)}
+            ${fromMapToInterface(variations.simpleOnlyProps)}
         };
 
         export interface ${rdt.node.name.value}_db {
-            ${sharedProperties.join("\n")}
-            ${variations.dbReprProps.join("\n")}
+            ${fromMapToInterface(sharedProperties)}
+            ${fromMapToInterface(variations.dbReprProps)}
         };
 
-        export interface ${rdt.node.name.value} {
-            ${sharedProperties.join("\n")}
-            ${variations.liveReprProps.join("\n")}
+        export interface ${rdt.node.name.value}_final {
+            ${fromMapToInterface(sharedProperties)}
+            ${fromMapToInterface(variations.liveReprProps)}
         };
 
         function ${rdt.node.name.value}_simple_to_db(input: ${rdt.node.name.value}_simple): ${rdt.node.name.value}_db {
@@ -123,11 +139,24 @@ function generateDefinition(rdt: RDTDefinition): string {
             } satisfies ${rdt.node.name.value}_db;
         }
 
-        function ${rdt.node.name.value}_db_to_final(input: ${rdt.node.name.value}_db): ${rdt.node.name.value} {
+        function ${rdt.node.name.value}_db_to_final(input: ${rdt.node.name.value}_db): ${rdt.node.name.value}_final {
             return {
                 ${sharedTransforms.join("\n")}
                 ${variations.liveReprTransforms.join("\n")}
-            } satisfies ${rdt.node.name.value};
+            } satisfies ${rdt.node.name.value}_final;
+        }
+
+        export class ${rdt.node.name.value} {
+            static async create(pojo: ${rdt.node.name.value}_simple): Promise<${rdt.node.name.value}_final> {
+                let db_row: ${rdt.node.name.value}_db = ${rdt.node.name.value}_simple_to_db(pojo);
+        
+                const res = ${writeASql()};
+                if (res.rowCount === 0) {
+                    throw new Error('Failed to create ${rdt.node.name.value}');
+                }
+                const row = res.rows[0];
+                return ${rdt.node.name.value}_db_to_final(row);
+            }
         }
     `;
 }
@@ -147,9 +176,11 @@ export const foundationFile = (content: string) => `
 import { Pool } from 'pg';
 
 const pool = new Pool({
-    host: 'localhost:26257',
+    host: 'localhost',
+    port: 26257,
     user: 'root',
-    max: 5,
+    database: "dbapp",
+    max: 1,
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 500,
 });

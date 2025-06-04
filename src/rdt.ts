@@ -344,11 +344,6 @@ export function debugRDTNode(node: RDTNode) {
     return `${name}:${node.type}`;
 }
 
-
-
-
-
-
 export function getTypeMetadata(node: RDTNode, createIfNotExists?: boolean) : RDTTypeDef | undefined {
     let res = node.metadata["typeinfo"];
     if (res || !createIfNotExists) return res; 
