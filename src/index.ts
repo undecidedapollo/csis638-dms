@@ -5,6 +5,7 @@ import { RDTContext, RDTDerivedProperty, RDTNode, RDTRoot, RDTRWRoot } from './r
 import { convertToRDT, debugRDTNode, genRdtId, replacer, resolveTypes, walkDFS } from './rdt';
 import { generateSDK } from './genSDK';
 import fs from "node:fs";
+import { generateDDL } from './genDDL';
 
 const input = `
     Transaction {
@@ -150,6 +151,8 @@ try {
     console.log(JSON.stringify(rwSeparatedOutput, replacer, 2));
     const file = generateSDK(rwSeparatedOutput);
     await fs.promises.writeFile("./a.ts", file);
+    const sql = generateDDL(rwSeparatedOutput);
+    await fs.promises.writeFile("./a.sql", sql);
     console.log(file);
     // console.log(JSON.stringify(Array.from(tainted.values()).map((x) => debugRDTNode(x)), replacer, 2));
 } catch (e) {
