@@ -8,13 +8,19 @@ import fs from "node:fs";
 import { generateDDL } from './genDDL';
 
 const input = `
-    Transaction {
-        id: string,
-        bankAccountId: string,
-        amount: number,
-        doubleAmount: (rand: number) => $row.amount * 2 + rand
+    ExampleTable {
+        simpleField: number
+        derivedField: (val: number) => $row.simpleField * 2 + val
     }
 `;
+// const input = `
+//     Transaction {
+//         id: string,
+//         bankAccountId: string,
+//         amount: number,
+//         doubleAmount: (rand: number) => $row.amount * 2 + rand
+//     }
+// `;
 
 // const input = `
 //     BankAccount { 

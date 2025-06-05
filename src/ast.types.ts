@@ -1,9 +1,5 @@
 export type AST = DefinitionNode[];
 
-/** -----------------------------
- *  Definition Nodes & Entities
- *  -----------------------------
- */
 export interface DefinitionNode {
     type: "Definition";
     name: IdentifierNode;
@@ -29,10 +25,6 @@ export interface ParamNode {
     definition: TypeExprNode | ContextNode | null;
 }
 
-/** -----------------------------
- *  Expression Nodes
- *  -----------------------------
- */
 export type ExprNode =
     | ReturnExprNode
     | ObjectLiteralExprNode
