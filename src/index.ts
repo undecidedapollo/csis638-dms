@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { AST } from './ast.types';
-import parser from './bankaccount.cjs';
+import parser from './dsl.cjs';
 import { RDTContext, RDTDerivedProperty, RDTNode, RDTRoot, RDTRWRoot } from './rdt.types';
 import { convertToRDT, debugRDTNode, genRdtId, replacer, resolveTypes, walkDFS } from './rdt';
 import { generateSDK } from './genSDK';

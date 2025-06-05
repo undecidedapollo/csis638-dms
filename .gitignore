@@ -1,4 +1,4 @@
 /dist
 node_modules/
-src/bankaccount.cjs
-src/bankaccount.d.ts
+src/dsl.cjs
+src/dsl.d.ts

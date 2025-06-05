@@ -7,7 +7,7 @@
     "tsc": "tsc",
     "tsx": "tsx",
     "start": "tsc --noEmit && tsx",
-    "gen": "peggy -o src/bankaccount.cjs -c peggy.config.cjs bankaccount.pegjs"
+    "gen": "peggy -o src/dsl.cjs -c peggy.config.cjs dsl.pegjs"
   },
   "keywords": [],
   "author": "",
