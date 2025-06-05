@@ -24,5 +24,5 @@ Manually run DDL Changes (`gen.sql`) against postgres / cockroach database, ensu
 Then to test the generated SDK work:
 
 ```sh
-npm run start atest.ts
+npm run start testgen.ts
 ```
