@@ -1,0 +1,4 @@
+ExampleTable {
+    simpleField: number
+    derivedField: (val: number) => $row.simpleField * 2 + val
+}

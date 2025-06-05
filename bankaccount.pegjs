@@ -1,8 +1,8 @@
 Start
-  = (_ def:Definition _ { return def; })+
+  = (_? def:Definition _? { return def; })+
 
 Definition
-  = name:Identifier _ "{" _ props:DefinitionBodyList? _ "}" {
+  = name:Identifier _? "{" _ props:DefinitionBodyList? _ "}" {
       return { type: "Definition", name, properties: props || [] };
     }
 

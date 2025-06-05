@@ -7,12 +7,12 @@ import { generateSDK } from './genSDK';
 import fs from "node:fs";
 import { generateDDL } from './genDDL';
 
-const input = `
-    ExampleTable {
-        simpleField: number
-        derivedField: (val: number) => $row.simpleField * 2 + val
-    }
-`;
+if (!process.argv[2]) {
+    throw new Error(`Expected <filename> to be provided`);
+} 
+
+const input = await fs.promises.readFile(process.argv[2], "utf-8");
+
 // const input = `
 //     Transaction {
 //         id: string,
@@ -156,9 +156,9 @@ try {
     });
     console.log(JSON.stringify(rwSeparatedOutput, replacer, 2));
     const file = generateSDK(rwSeparatedOutput);
-    await fs.promises.writeFile("./a.ts", file);
+    await fs.promises.writeFile("./gen.ts", file);
     const sql = generateDDL(rwSeparatedOutput);
-    await fs.promises.writeFile("./a.sql", sql);
+    await fs.promises.writeFile("./gen.sql", sql);
     console.log(file);
     // console.log(JSON.stringify(Array.from(tainted.values()).map((x) => debugRDTNode(x)), replacer, 2));
 } catch (e) {
