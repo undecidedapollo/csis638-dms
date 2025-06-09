@@ -101,7 +101,13 @@ export interface RDTTypeFunctionDefinition {
     returns: RDTTypeDef;
 }
 
-export type RDTTypeDef = RDTTypeIdentifier | RDTTypeContext | RDTTypeUnknown | RDTObjectTypeDefinition | RDTTypeFunctionDefinition;
+export interface RDTTypeBinding {
+    type: "RDTTypeBinding";
+    value: RDTTypeDef;
+    next: RDTTypeDef;
+}
+
+export type RDTTypeDef = RDTTypeIdentifier | RDTTypeContext | RDTTypeUnknown | RDTObjectTypeDefinition | RDTTypeFunctionDefinition | RDTTypeBinding;
 
 export interface RDTSourceContext extends HasMetadata {
     id: string;

@@ -73,6 +73,7 @@ async function main() {
 
     resolveTypes(finalOutput as RDTRoot);
     await fs.promises.writeFile("out/rdt-typed", JSON.stringify(finalOutput, replacer, 2));
+    await fs.promises.writeFile("out/rdt-typedtree", toRDTreeString(finalOutput));
     if (targetStage === 4) return;
 
     // TODO: Move this logic to the optimizer side of things. Everything "could" be queryside if required. This isn't true, timeSince: Time.readTime.since(Time.writeTime, "seconds")

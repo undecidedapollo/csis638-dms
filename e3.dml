@@ -2,7 +2,7 @@ ExampleTable {
     simpleField: number
 }
 
-addStuff = (num: string) => {
+addStuff = (num: number) => {
     $let x = 5
     $let y = 10
 

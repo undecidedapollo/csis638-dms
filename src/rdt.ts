@@ -1,3 +1,4 @@
+
 import { randomUUID } from "node:crypto";
 import { AST, ASTNode, IdentifiesNode, ReturnExprNode } from "./ast.types";
 import { RDTAssignment, RDTBinding, RDTComputeNode, RDTConditional, RDTContext, RDTDefinition, RDTDerivedProperty, RDTFunction, RDTMath, RDTNode, RDTNull, RDTProperty, RDTReference, RDTReturn, RDTRoot, RDTSideEffect, RDTSimpleProperty, RDTSourceContext, RDTSourceRuntime, RDTTypeContext, RDTTypeDef, RDTTypeIdentifier, RDTTypeUnknown } from "./rdt.types";
@@ -585,6 +586,27 @@ export function toRDTreeString(rdt: RDTNode) {
     return prettyPrint(output);
 }
 
+export function debugRDTType(type?: RDTTypeDef) {
+    if (!type) return "unknown";
+    if (type.type === "RDTTypeUnknown") return "unknown";
+    if (type.type === "RDTTypeIdentifier") return type.name;
+    if (type.type === "RDTObjectTypeDefinition") {
+        return `object(${Object.entries(type.properties).map(([key, value]) => `${key}: ${debugRDTType(value)}`).join(", ")})`;
+    }
+    if (type.type === "RDTTypeContext") {
+        return `$${type.name}`;
+    }
+    if (type.type === "RDTTypeBinding") {
+        return `binding(${debugRDTType(type.value)}, ${debugRDTType(type.next)})`;
+    }
+    if (type.type === "RDTTypeFunctionDefinition") {
+        return `(${Object.entries(type.params).map(([key, value]) => `${key}: ${debugRDTType(value)}`).join(", ")}) => ${debugRDTType(type.returns)}`;
+    }
+
+    throw new Error(`Unknown RDT type: ${JSON.stringify(type, replacer, 2)}`);
+}
+
+
 export function debugRDTNode(node: RDTNode) {
     let name: string = "unknown";
     if (node.type === "RDTFunction") {
@@ -603,24 +625,44 @@ export function debugRDTNode(node: RDTNode) {
         name = node.value;
     }
 
-    return `${name}:${node.type}`;
+    return `${name}:${node.type} ${debugRDTType(getTypeMetadata(node, { returnRawBinding: true }))}`;
 }
 
-export function getTypeMetadata(node: RDTNode, createIfNotExists?: boolean): RDTTypeDef | undefined {
-    let res = node.metadata["typeinfo"];
-    if (res || !createIfNotExists) return res;
-    res = {};
-    node.metadata["typeinfo"] = {};
+export function getTypeMetadata(node: RDTNode, options?: { returnRawBinding?: boolean}): RDTTypeDef | undefined {
+    let res = node.metadata["typeinfo"] as RDTTypeDef;
+    if (!res) return undefined;
+    if (res.type === "RDTTypeBinding" && !options?.returnRawBinding) {
+        return res.next;
+    }
     return res;
 }
 
-function rdtIsNumber(node: RDTNode): boolean {
-    const typeData = getTypeMetadata(node);
-    return typeData?.type === "RDTTypeIdentifier" && typeData.name === "number";
+function rdtIsType(node: RDTNode, type: string): boolean {
+    const typeData = getTypeMetadata(node, {returnRawBinding: true});
+    return typeData?.type === "RDTTypeIdentifier" && typeData.name === type;
+}
+
+function rdtIsSameType(node1: RDTNode, node2: RDTNode): boolean {
+    const node1TypeData = getTypeMetadata(node1, {returnRawBinding: true});
+    const node2TypeData = getTypeMetadata(node2, {returnRawBinding: true});
+    if (node1TypeData?.type !== node2TypeData?.type) return false;
+    if (node1TypeData?.type === "RDTTypeUnknown") return true;
+    if (node1TypeData?.type === "RDTTypeIdentifier" && node2TypeData?.type === "RDTTypeIdentifier") {
+        return node1TypeData.name === node2TypeData.name;
+    }
+    if (node1TypeData?.type === "RDTObjectTypeDefinition" && node2TypeData?.type === "RDTObjectTypeDefinition") {
+        // TODO: Implement this
+        return true;
+    }
+    if (node1TypeData?.type === "RDTTypeFunctionDefinition" && node2TypeData?.type === "RDTTypeFunctionDefinition") {
+        return true;
+    }
+
+    throw new Error(`Unable to compare types: ${JSON.stringify(node1TypeData, replacer, 2)} and ${JSON.stringify(node2TypeData, replacer, 2)}`);
 }
 
 export function rdtIsNotKnown(node: RDTNode): boolean {
-    const typeData = getTypeMetadata(node);
+    const typeData = getTypeMetadata(node, {returnRawBinding: true});
     return !typeData || typeData.type === "RDTTypeUnknown";
 }
 
@@ -632,27 +674,44 @@ export function resolveTypes(root: RDTRoot): RDTRoot {
     }
 
     function copyTypeMetadataIfKnown(source: RDTNode, dest: RDTNode): void {
-        const meta = getTypeMetadata(source, false);
+        let meta = getTypeMetadata(source, {returnRawBinding: true});
         if (!meta || meta.type === "RDTTypeUnknown") return;
-        setTypeMetadata(dest, meta);
+        if (meta.type === "RDTTypeBinding") {
+            if (dest.type === "RDTReference") {
+                setTypeMetadata(dest, meta.value);
+            } else {
+                setTypeMetadata(dest, meta.next);
+            }
+        } else {
+            setTypeMetadata(dest, meta);
+        }
     }
 
     let numIterations = 0;
     do {
         wasUpdated = false;
         root = walkDFS(root, {
+            state: new Map<string, RDTNode>(),
+            onBefore: (ctx) => {
+                ctx.state.set(ctx.node.id, ctx.node);
+            },
             onAfter: (ctx) => {
                 if (ctx.node.type === "RDTSourceConstant") {
                     setTypeMetadata(ctx.node, ctx.node.typeDef);
                 } else if (ctx.node.type === "RDTMath") {
                     if (rdtIsNotKnown(ctx.node.lhs) || rdtIsNotKnown(ctx.node.rhs)) return;
-                    if (!rdtIsNumber(ctx.node.lhs)) throw new Error(`Excepted lhs to be a number: ${JSON.stringify(ctx.node.lhs, replacer, 2)}`);
-                    if (!rdtIsNumber(ctx.node.rhs)) throw new Error(`Excepted rhs to be a number: ${JSON.stringify(ctx.node.rhs, replacer, 2)}`);
-                    setTypeMetadata(ctx.node, { type: "RDTTypeIdentifier", name: "number" });
+                    if (!rdtIsSameType(ctx.node.lhs, ctx.node.rhs)) throw new Error(`RDTMath lhs and rhs types do not match: ${JSON.stringify(ctx.node, replacer, 2)}`);
+                    if (["==", "<", ">"].includes(ctx.node.operator)) {
+                        setTypeMetadata(ctx.node, { type: "RDTTypeIdentifier", name: "boolean" });
+                    } else if (["+", "-", "*", "/"].includes(ctx.node.operator)) {
+                        setTypeMetadata(ctx.node, { type: "RDTTypeIdentifier", name: "number" });
+                    } else {
+                        throw new Error(`Unknown RDTMath operator: ${ctx.node.operator} at node: ${JSON.stringify(ctx.node, replacer, 2)}`);
+                    }
                 } else if (ctx.node.type === "RDTFunction") {
                     const params = Object.fromEntries(ctx.node.parameters.map((param) => {
                         if (param.type !== "RDTSourceRuntime") throw new Error(`Unknown parameter RDT type: ${param.type} ${JSON.stringify(param, replacer, 2)}`);
-                        const propMeta = rdtIsNotKnown(param) ? { type: "RDTTypeUnknown" } satisfies RDTTypeUnknown : getTypeMetadata(param, false)!;
+                        const propMeta = rdtIsNotKnown(param) ? { type: "RDTTypeUnknown" } satisfies RDTTypeUnknown : getTypeMetadata(param)!;
                         return [param.name, propMeta];
                     }));
 
@@ -676,7 +735,7 @@ export function resolveTypes(root: RDTRoot): RDTRoot {
                     setTypeMetadata(ctx.node, { type: "RDTTypeIdentifier", name: ctx.node.typeDef });
                 } else if (ctx.node.type === "RDTDefinition") {
                     const props = Object.fromEntries(ctx.node.properties.map((prop) => {
-                        const propMeta = rdtIsNotKnown(prop) ? { type: "RDTTypeUnknown" } satisfies RDTTypeUnknown : getTypeMetadata(prop, false)!;
+                        const propMeta = rdtIsNotKnown(prop) ? { type: "RDTTypeUnknown" } satisfies RDTTypeUnknown : getTypeMetadata(prop)!;
                         return [prop.node.identifier.value, propMeta];
                     }));
 
@@ -696,6 +755,30 @@ export function resolveTypes(root: RDTRoot): RDTRoot {
                     setTypeMetadata(ctx.node, ctx.node.typeDef);
                 } else if (ctx.node.type === "RDTRoot") {
                     // NOOP
+                } else if (ctx.node.type === "RDTReference") {
+                    const referencedNode = ctx.state.get(ctx.node.referenceId);
+                    if (referencedNode) {
+                        copyTypeMetadataIfKnown(referencedNode, ctx.node);
+                    }
+                } else if (ctx.node.type === "RDTConditional") {
+                    if (rdtIsNotKnown(ctx.node.condition)) return;
+                    if (!rdtIsType(ctx.node.condition, "boolean")) throw new Error(`Expected condition to be a boolean: ${JSON.stringify(ctx.node.condition, replacer, 2)}`);
+                    if (rdtIsNotKnown(ctx.node.then) || rdtIsNotKnown(ctx.node.else)) return;
+                    if (!rdtIsSameType(ctx.node.then, ctx.node.else)) {
+                        throw new Error(`RDTConditional then and else types do not match: ${JSON.stringify(ctx.node, replacer, 2)} `);
+                    }
+                    copyTypeMetadataIfKnown(ctx.node.then, ctx.node);
+                } else if (ctx.node.type === "RDTBinding") {
+                    setTypeMetadata(ctx.node, {
+                        type: "RDTTypeBinding",
+                        value: getTypeMetadata(ctx.node.value) ?? { type: "RDTTypeUnknown" } satisfies RDTTypeUnknown,
+                        next: getTypeMetadata(ctx.node.next) ?? { type: "RDTTypeUnknown" } satisfies RDTTypeUnknown,
+                    });
+                } else if (ctx.node.type === "RDTAssignment") {
+                    if (rdtIsNotKnown(ctx.node.value)) return;
+                    setTypeMetadata(ctx.node, getTypeMetadata(ctx.node.value)!);
+                } else if (ctx.node.type === "RDTSideEffect") {
+                    copyTypeMetadataIfKnown(ctx.node.next, ctx.node);
                 } else {
                     throw new Error(`Unknown RDT node type: ${ctx.node.type} node: ${JSON.stringify(ctx.node, replacer, 2)}`);
                 }
