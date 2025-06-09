@@ -1,5 +1,6 @@
-import { debugRDTNode, getTypeMetadata, rdtIsNotKnown, replacer } from "./rdt";
+import { debugRDTNode, getTypeMetadata, replacer } from "./rdt.util";
 import { RDTDefinition, RDTNode, RDTTypeDef } from "./rdt.types";
+import { rdtIsNotKnown } from "./rdtTypeSystem";
 
 function escapeKey(key: string): string {
     return `"${key}"`;

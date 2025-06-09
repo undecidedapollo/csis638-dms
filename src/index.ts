@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { AST } from './ast.types';
 import parser from './dsl.cjs';
 import { RDTContext, RDTDerivedProperty, RDTNode, RDTReference, RDTRoot, RDTRWRoot } from './rdt.types';
-import { convertToRDT, debugRDTNode, genRdtId, replacer, replacer2, resolveTypes, toRDTreeString, walkDFS } from './rdt';
+import { convertToRDT, genRdtId, toRDTreeString, walkDFS } from './rdt';
 import { generateSDK } from './genSDK';
 import fs from "node:fs";
 import { generateDDL } from './genDDL';
 import { resolveRdtReferences } from './rdtReferenceResolver';
 import { removeRedundentReferences } from './rdtRemoveRedundentReferences';
+import { debugRDTNode, replacer, replacer2 } from './rdt.util';
+import { resolveTypes } from './rdtTypeSystem';
 
 if (!process.argv[2]) {
     throw new Error(`Expected <filename> to be provided`);

@@ -1,4 +1,4 @@
-import { replacer, walkDFS } from "./rdt";
+import {  walkDFS } from "./rdt";
 import { RDTContext, RDTNode, RDTReference } from "./rdt.types";
 
 export function removeRedundentReferences(source: RDTNode) {

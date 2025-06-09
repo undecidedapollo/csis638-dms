@@ -1,5 +1,6 @@
-import { replacer, walkDFS } from "./rdt";
+import { walkDFS } from "./rdt";
 import { RDTContext, RDTNode, RDTReference } from "./rdt.types";
+import { replacer } from "./rdt.util";
 
 export function resolveRdtReferences(source: RDTNode) {
     const rdtCtx2 = new RDTContext();
