@@ -1,0 +1,18 @@
+ExampleTable {
+    simpleField: number
+}
+
+addStuff = (num: string) => {
+    $let x = 5
+    $let y = 10
+
+    $let sum = x + y + num;
+
+    $if (sum < 0) {
+        $return 0
+    } $elif (sum > 100) {
+        $return 100
+    }
+
+    $return sum + 11
+}

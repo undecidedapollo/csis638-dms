@@ -2,7 +2,7 @@ ExampleTable {
     simpleField: number
 }
 
- findByField = (id: string) => { 
+findByField = (id: string) => {
     $if (123) {
         $if (456) {
             $let x = 5

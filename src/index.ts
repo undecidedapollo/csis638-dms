@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { AST } from './ast.types';
 import parser from './dsl.cjs';
-import { RDTContext, RDTDerivedProperty, RDTNode, RDTRoot, RDTRWRoot } from './rdt.types';
+import { RDTContext, RDTDerivedProperty, RDTNode, RDTReference, RDTRoot, RDTRWRoot } from './rdt.types';
 import { convertToRDT, debugRDTNode, genRdtId, replacer, replacer2, resolveTypes, toRDTreeString, walkDFS } from './rdt';
 import { generateSDK } from './genSDK';
 import fs from "node:fs";
 import { generateDDL } from './genDDL';
+import { resolveRdtReferences } from './rdtReferenceResolver';
+import { removeRedundentReferences } from './rdtRemoveRedundentReferences';
 
 if (!process.argv[2]) {
     throw new Error(`Expected <filename> to be provided`);
@@ -56,33 +58,16 @@ async function main() {
     const ast: AST = parser.parse(input);
     await fs.promises.writeFile("out/ast", JSON.stringify(ast, null, 2));
     if (targetStage === 1) return;
-    const rdtCtx = new RDTContext();
-    const rdt = convertToRDT(ast, rdtCtx);
-    console.log(toRDTreeString(rdt));
+    const rdt = convertToRDT(ast);
     await fs.promises.writeFile("out/rdt", JSON.stringify(rdt, replacer2, 2));
-    await fs.promises.writeFile("out/rdtctx", JSON.stringify(rdtCtx.tree(), null, 2));
+    await fs.promises.writeFile("out/rdttree", toRDTreeString(rdt));
     if (targetStage === 2) return;
-    const finalOutput = walkDFS(rdt, {
-        onAfter: (ctx) => {
-            // console.log(ctx.node.type, ctx.lineage.length, !!ctx.node.rdtContext);
-            if (ctx.node.type === "RDTSourceConstant") {
-                const [parent] = ctx.lineage;
-                if (parent.type === "RDTPropertyAccess" && parent.propertyName === ctx.node) {
-                    return;
-                }
-                if (ctx.node.typeDef.type === "RDTTypeIdentifier" && ctx.node.typeDef.name === "string") {
-                    const matchingNode = ctx.node.rdtContext.findByName(ctx.node.value);
-                    if (!matchingNode) {
-                        throw new Error(`Unable to find expected reference: ${ctx.node.value} for node: ${JSON.stringify(ctx.node, replacer, 2)}`);
-                    }
-                    return {
-                        replacement: matchingNode.node,
-                    };
-                }
-            }
-        }
-    });
+
+    const {context: rdtCtx2, rdt: finalOutputTemp} = resolveRdtReferences(rdt);
+    const {rdt: finalOutput} = removeRedundentReferences(finalOutputTemp);
     await fs.promises.writeFile("out/rdt-resolved", JSON.stringify(finalOutput, replacer, 2));
+    await fs.promises.writeFile("out/rdt-resolvedctx", JSON.stringify(rdtCtx2.tree(), null, 2));
+    await fs.promises.writeFile("out/rdt-resolvedtree", toRDTreeString(finalOutput));
     if (targetStage === 3) return;
 
 
@@ -137,7 +122,6 @@ async function main() {
                         replacement: {
                             id: referenceId,
                             type: "RDTReference",
-                            rdtContext: ctx.node.rdtContext,
                             referenceId,
                             metadata: {},
                         },
@@ -153,7 +137,6 @@ async function main() {
                         derivation: {
                             id: genRdtId(),
                             type: "RDTRWRoot",
-                            rdtContext: ctx.node.rdtContext,
                             read: ctx.node.derivation,
                             write: writeAst.get(ctx.node.id)!.write,
                             metadata: {},

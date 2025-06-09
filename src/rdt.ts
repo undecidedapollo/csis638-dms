@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { AST, ASTNode, DefinitionFunctionNode, DefinitionNode, DefinitionPropertyNode, IdentifiesNode, ReturnExprNode } from "./ast.types";
-import { RDTAssignment, RDTBinding, RDTComputeNode, RDTConditional, RDTContext, RDTDefinition, RDTDerivedProperty, RDTFunction, RDTMath, RDTNode, RDTNull, RDTProperty, RDTReference, RDTRoot, RDTSideEffect, RDTSimpleProperty, RDTSourceContext, RDTSourceRuntime, RDTTypeContext, RDTTypeDef, RDTTypeIdentifier, RDTTypeUnknown } from "./rdt.types";
+import { AST, ASTNode, IdentifiesNode, ReturnExprNode } from "./ast.types";
+import { RDTAssignment, RDTBinding, RDTComputeNode, RDTConditional, RDTContext, RDTDefinition, RDTDerivedProperty, RDTFunction, RDTMath, RDTNode, RDTNull, RDTProperty, RDTReference, RDTReturn, RDTRoot, RDTSideEffect, RDTSimpleProperty, RDTSourceContext, RDTSourceRuntime, RDTTypeContext, RDTTypeDef, RDTTypeIdentifier, RDTTypeUnknown } from "./rdt.types";
 
 export function genRdtId() {
     return randomUUID();
@@ -11,28 +11,26 @@ export function genSystemIdentifier() {
     return `$system_${systemIdentifierCounter++}`;
 }
 
-export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }): RDTComputeNode {
+export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
     if (ast.type === "operator") {
-        if (["=="].includes(ast.operator) || "+-*/".includes(ast.operator)) {
-            const lhs = rdtExpressionWalker(ast.lhs, ctx);
-            const rhs = rdtExpressionWalker(ast.rhs, ctx);
+        if (["=="].includes(ast.operator) || "+-*/<>".includes(ast.operator)) {
+            const lhs = rdtExpressionWalker(ast.lhs);
+            const rhs = rdtExpressionWalker(ast.rhs);
             return {
                 id: genRdtId(),
                 type: "RDTMath",
-                rdtContext: ctx.context,
                 lhs,
                 rhs,
                 operator: ast.operator as RDTMath["operator"],
                 metadata: {},
             };
         } else if (ast.operator === ".") {
-            const source = rdtExpressionWalker(ast.lhs, ctx);
-            const propertyName = rdtExpressionWalker(ast.rhs, ctx);
+            const source = rdtExpressionWalker(ast.lhs);
+            const propertyName = rdtExpressionWalker(ast.rhs);
 
             return {
                 id: genRdtId(),
                 type: "RDTPropertyAccess",
-                rdtContext: ctx.context,
                 source,
                 propertyName,
                 metadata: {},
@@ -46,7 +44,6 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
         return {
             id: genRdtId(),
             type: "RDTSourceConstant",
-            rdtContext: ctx.context,
             value: ast.base.value,
             typeDef: {
                 type: "RDTTypeIdentifier",
@@ -58,7 +55,6 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
         return {
             id: genRdtId(),
             type: "RDTSourceConstant",
-            rdtContext: ctx.context,
             value: ast.value,
             typeDef: {
                 type: "RDTTypeIdentifier",
@@ -70,7 +66,6 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
         return {
             id: genRdtId(),
             type: "RDTSourceContext",
-            rdtContext: ctx.context,
             typeDef: {
                 type: "RDTTypeContext",
                 name: ast.value?.value,
@@ -80,10 +75,9 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
     } else if (ast.type === "Param") {
         if (ast.definition?.type === "TypeExpr") {
             if (ast.definition?.array) throw new Error("rdt param type is array");
-            const res = {
+            return {
                 id: genRdtId(),
                 type: "RDTSourceRuntime",
-                rdtContext: ctx.context,
                 name: ast.identifier.value,
                 typeDef: {
                     type: "RDTTypeIdentifier",
@@ -91,13 +85,10 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
                 },
                 metadata: {},
             } satisfies RDTSourceRuntime;
-            ctx.context.addNode(res, ast.identifier.value, undefined, true);
-            return res;
         } else if (ast.definition?.type === "context") {
-            const res = {
+            return {
                 id: genRdtId(),
                 type: "RDTSourceContext",
-                rdtContext: ctx.context,
                 name: ast.identifier.value,
                 typeDef: {
                     type: "RDTTypeContext",
@@ -105,43 +96,35 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
                 },
                 metadata: {},
             } satisfies RDTSourceContext;
-            ctx.context.addNode(res, ast.identifier.value, undefined, true);
-            return res;
         } else {
             const res = {
                 id: genRdtId(),
                 type: "RDTSourceRuntime",
-                rdtContext: ctx.context,
                 name: ast.identifier.value,
                 typeDef: {
                     type: "RDTTypeUnknown",
                 },
                 metadata: {},
             } satisfies RDTSourceRuntime;
-            ctx.context.addNode(res, ast.identifier.value, undefined, true);
             return res;
         }
     } else if (ast.type === "LambdaExpr") {
-        const childCtx = ctx.context.nested();
-        const parameters = ast.params.map((param) => rdtExpressionWalker(param, { context: childCtx }));
-        const body = rdtExpressionWalker(ast.body, { context: childCtx });
+        const parameters = ast.params.map((param) => rdtExpressionWalker(param));
+        const body = rdtExpressionWalker(ast.body);
         const node = {
             id: genRdtId(),
             type: "RDTFunction",
-            rdtContext: ctx.context,
             parameters,
             body,
             metadata: {},
         } satisfies RDTFunction;
-        ctx.context.addNode(node, undefined, childCtx);
         return node;
     } else if (ast.type === "InvokeExpr") {
-        const source = rdtExpressionWalker(ast.lhs, ctx);
-        const args = ast.args.map((arg) => rdtExpressionWalker(arg, ctx));
+        const source = rdtExpressionWalker(ast.lhs);
+        const args = ast.args.map((arg) => rdtExpressionWalker(arg));
         return {
             id: genRdtId(),
             type: "RDTInvoke",
-            rdtContext: ctx.context,
             source,
             args,
             metadata: {},
@@ -151,21 +134,21 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
         if (hasReturn !== -1 && hasReturn !== ast.exprs.length - 1) {
             throw new Error(`Return expression must be the last expression in an ordered expressions block, found at index ${hasReturn} in: ${JSON.stringify(ast, replacer, 2)}`);
         }
-
+    
         let astExprs = ast.exprs;
         let finalExpr: RDTNode;
         if (hasReturn !== -1) {
-            finalExpr = rdtExpressionWalker((astExprs[hasReturn] as ReturnExprNode).expr, ctx);
+            finalExpr = rdtExpressionWalker((astExprs[hasReturn] as ReturnExprNode).expr);
         } else {
-            finalExpr = rdtNull(ctx.context);
+            finalExpr = rdtNull();
         }
-
-        const exprs = astExprs.slice(0, hasReturn !== -1 ? hasReturn : astExprs.length).map((expr) => rdtExpressionWalker(expr, ctx)).reverse();
-
+    
+        const exprs = astExprs.slice(0, hasReturn !== -1 ? hasReturn : astExprs.length).map((expr) => rdtExpressionWalker(expr)).reverse();
+    
         if (exprs.length === 0) {
             return finalExpr;
         }
-
+    
         return exprs.reduce((acc: RDTComputeNode, curr) => {
             if (curr.type === "RDTBinding") {
                 if (curr.next.type !== "RDTNull") {
@@ -181,6 +164,7 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
                         else: acc,
                     };
                 }
+                let referenceId = genRdtId();
                 let identifier = genSystemIdentifier();
                 const next = walkDFS(curr, {
                     onAfter: (ctx) => {
@@ -192,9 +176,9 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
                                     else: {
                                         id: genRdtId(),
                                         metadata: {},
-                                        rdtContext: ctx.node.rdtContext,
                                         type: "RDTReference",
-                                        referenceId: identifier,
+                                        referenceId,
+                                        name: identifier,
                                     } satisfies RDTReference,
                                 } satisfies RDTConditional,
                             };
@@ -205,9 +189,9 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
                                     next: {
                                         id: genRdtId(),
                                         metadata: {},
-                                        rdtContext: ctx.node.rdtContext,
                                         type: "RDTReference",
-                                        referenceId: identifier,
+                                        referenceId,
+                                        name: identifier,
                                     } satisfies RDTReference,
                                 } satisfies RDTSideEffect,
                             };
@@ -215,10 +199,11 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
                     }
                 });
                 return {
-                    id: genRdtId(),
+                    id: referenceId,
                     type: "RDTBinding",
-                    rdtContext: ctx.context,
-                    metadata: {},
+                    metadata: {
+                        "systemGenerated": true,
+                    },
                     typeDef: {
                         type: "RDTTypeUnknown",
                     },
@@ -230,7 +215,6 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
                 return {
                     id: genRdtId(),
                     type: "RDTSideEffect",
-                    rdtContext: ctx.context,
                     typeDef: {
                         type: "RDTTypeUnknown",
                     },
@@ -241,62 +225,66 @@ export function rdtExpressionWalker(ast: ASTNode, ctx: { context: RDTContext }):
             }
         }, finalExpr);
     } else if (ast.type === "IfExpr") {
-        const condition = rdtExpressionWalker(ast.condition, ctx);
-        const thenExpr = rdtExpressionWalker(ast.then, ctx);
-        const elseExpr = ast.else ? rdtExpressionWalker(ast.else, ctx) : rdtNull(ctx.context);
+        const condition = rdtExpressionWalker(ast.condition);
+        const thenExpr = rdtExpressionWalker(ast.then);
+        const elseExpr = ast.else ? rdtExpressionWalker(ast.else) : rdtNull();
 
         return {
             id: genRdtId(),
             type: "RDTConditional",
-            rdtContext: ctx.context,
             condition,
             then: thenExpr,
             else: elseExpr,
             metadata: {},
         };
     } else if (ast.type === "LetExpr") {
-        const val = rdtExpressionWalker(ast.value, ctx);
-
+        const val = rdtExpressionWalker(ast.value);
         return {
             id: genRdtId(),
             type: "RDTBinding",
-            rdtContext: ctx.context,
             typeDef: {
                 // TODO: type not defined currently, add this to ast support
                 type: "RDTTypeUnknown",
             },
             name: ast.identifier.value,
             value: val,
-            next: rdtNull(ctx.context),
+            next: rdtNull(),
             metadata: {},
-        };
+        } satisfies RDTBinding;
+    } else if (ast.type === "ReturnExpr") {
+        return {
+            id: genRdtId(),
+            type: "RDTReturn",
+            metadata: {},
+            value: rdtExpressionWalker((ast as ReturnExprNode).expr),
+        } satisfies RDTReturn;
     } else {
         throw new Error(`Unable to rdt walk for ast type: ${ast.type} node: ${JSON.stringify(ast, null, 2)}`);
     }
 }
 
-function rdtNull(context: RDTContext): RDTNull {
+
+
+
+function rdtNull(): RDTNull {
     return {
         id: genRdtId(),
         type: "RDTNull",
-        rdtContext: context,
         metadata: {},
     };
 }
 
-export function astWalker(ast: ASTNode, ctx: { context: RDTContext }): RDTNode {
+export function astWalker(ast: ASTNode): RDTNode {
     if (ast.type === "Definition") {
         const def: RDTDefinition = {
             id: genRdtId(),
             type: "RDTDefinition",
-            rdtContext: ctx.context,
             node: ast,
             properties: [],
             metadata: {},
         };
-        const { context: child } = ctx.context.addNode(def, ast.name.value);
         for (const prop of ast.properties) {
-            const propDef = astWalker(prop, { context: child });
+            const propDef = astWalker(prop);
             if (propDef.type !== "SimpleProperty" && propDef.type !== "DerivedProperty") {
                 throw new Error(`Expected property to be SimpleProperty or DerivedProperty, got: ${propDef.type} at node: ${JSON.stringify(propDef, null, 2)}`);
 
@@ -307,45 +295,35 @@ export function astWalker(ast: ASTNode, ctx: { context: RDTContext }): RDTNode {
     } else if (ast.type === "DefinitionProperty") {
         if (ast.definition.type === "TypeExpr") {
             if (ast.definition.array) throw new Error(`Table aliasing not supported, due to "${ast.definition.base.value}[]"`);
-            const node = {
+            return {
                 id: genRdtId(),
                 type: "SimpleProperty",
-                rdtContext: ctx.context,
                 node: ast,
                 typeDef: ast.definition.base.value,
                 metadata: {},
             } satisfies RDTSimpleProperty;
-            ctx.context.addNode(node, ast.identifier.value, undefined, true);
-            return node;
         } else {
-            const childCtx = ctx.context.nested();
-            const derivation = rdtExpressionWalker(ast.definition, { context: childCtx });
-            const node = {
+            const derivation = rdtExpressionWalker(ast.definition);
+            return {
                 id: genRdtId(),
                 type: "DerivedProperty",
-                rdtContext: ctx.context,
                 node: ast,
                 derivation,
                 metadata: {},
             } satisfies RDTDerivedProperty;
-            ctx.context.addNode(node, ast.identifier.value, childCtx);
-            return node;
         }
     } else if (ast.type === "Assignment") {
-        const value = rdtExpressionWalker(ast.value, ctx);
-        const node = {
+        const value = rdtExpressionWalker(ast.value);
+        return {
             id: genRdtId(),
             type: "RDTAssignment",
-            rdtContext: ctx.context,
             name: ast.name.value,
             value,
             metadata: {},
         } satisfies RDTAssignment;
-        ctx.context.addNode(node, ast.name.value, undefined, true);
-        return node;
     } else {
         try {
-            return rdtExpressionWalker(ast, { context: ctx.context });
+            return rdtExpressionWalker(ast);
         } catch (e) {
             throw new Error(`Error while walking ast: ${ast.type} node: ${JSON.stringify(ast, null, 2)}\n${e instanceof Error ? e.message : e}`);
         }
@@ -353,11 +331,11 @@ export function astWalker(ast: ASTNode, ctx: { context: RDTContext }): RDTNode {
 }
 
 
-export function convertToRDT(ast: AST, context: RDTContext): RDTRoot {
+export function convertToRDT(ast: AST): RDTRoot {
     const definitions: RDTDefinition[] = [];
     const assignments: RDTAssignment[] = [];
     for (const node of ast) {
-        const res = astWalker(node, { context });
+        const res = astWalker(node);
         if (!res) continue;
         if (res.type === "RDTDefinition") {
             definitions.push(res);
@@ -370,36 +348,52 @@ export function convertToRDT(ast: AST, context: RDTContext): RDTRoot {
     return {
         id: genRdtId(),
         type: "RDTRoot",
-        rdtContext: context,
         definitions,
         assignments,
         metadata: {},
     };
 }
 
-export type WalkDFSOnNodeReturn = void | { replacement: RDTNode };
+export type WalkDFSOnNodeReturn<T> = void | { replacement?: RDTNode, state?: T };
 
-export interface WalkDFSOptions {
-    onBefore?: (ctx: { node: RDTNode, lineage: RDTNode[] }) => WalkDFSOnNodeReturn;
-    onAfter?: (ctx: { node: RDTNode, lineage: RDTNode[] }) => WalkDFSOnNodeReturn;
+export interface WalkDFSOptions<T> {
+    onBefore?: (ctx: { node: RDTNode, lineage: RDTNode[], state: T }) => WalkDFSOnNodeReturn<T>;
+    onAfter?: (ctx: { node: RDTNode, lineage: RDTNode[], state: T }) => WalkDFSOnNodeReturn<never>;
     currentLineage?: RDTNode[],
+    state?: T;
 }
 
-export function walkDFS(rdt: RDTNode, options: WalkDFSOptions): RDTNode {
+export function walkDFS<T = any>(rdt: RDTNode, options: WalkDFSOptions<T>): RDTNode {
     let defaultReturnNode: RDTNode = rdt;
+    let state: unknown = options.state;
     if (options.onBefore) {
         const beforeRes = options.onBefore({
             node: defaultReturnNode,
             lineage: options.currentLineage ?? [],
+            state: options.state!,
         });
-        if (beforeRes && ("replacement" in beforeRes)) {
-            defaultReturnNode = beforeRes.replacement;
+        if (beforeRes) {
+            if ("state" in beforeRes) {
+                state = beforeRes.state;
+            }
+            if ("replacement" in beforeRes) {
+                // TODO: What does it mean to replace onBefore? If it is a new node, it should be visited right? like a child? If it is the same node it has already been visited.
+                if (beforeRes.replacement!.id !== defaultReturnNode.id) {
+                    return walkDFS(beforeRes.replacement!, {
+                        ...options,
+                        state,
+                    });
+                } else {
+                    defaultReturnNode = beforeRes.replacement!;
+                }
+            }
         }
     }
 
     const childOpts = {
         ...options,
         currentLineage: options.currentLineage ? [defaultReturnNode, ...options.currentLineage] : [defaultReturnNode],
+        state: state as T,
     };
 
     if (defaultReturnNode.type === "RDTRoot") {
@@ -475,6 +469,16 @@ export function walkDFS(rdt: RDTNode, options: WalkDFSOptions): RDTNode {
             source: walkDFS(defaultReturnNode.source, childOpts) as RDTComputeNode,
             args: defaultReturnNode.args.map((arg) => walkDFS(arg, childOpts)) as RDTComputeNode[],
         }
+    } else if (defaultReturnNode.type === "RDTOrderedExpressions") {
+        defaultReturnNode = {
+            ...defaultReturnNode,
+            exprs: defaultReturnNode.exprs.map((expr) => walkDFS(expr, childOpts)) as RDTComputeNode[],
+        };
+    } else if (defaultReturnNode.type === "RDTReturn") {
+        defaultReturnNode = {
+            ...defaultReturnNode,
+            value: walkDFS(defaultReturnNode.value, childOpts) as RDTComputeNode,
+        };
     } else {
         throw new Error(`Unable to walk unknown RDT node type: ${defaultReturnNode.type} node: ${JSON.stringify(defaultReturnNode, replacer, 2)}`);
     }
@@ -483,9 +487,10 @@ export function walkDFS(rdt: RDTNode, options: WalkDFSOptions): RDTNode {
         const afterRes = options.onAfter({
             node: defaultReturnNode,
             lineage: options.currentLineage ?? [],
+            state: state as any,
         });
         if (afterRes && ("replacement" in afterRes)) {
-            defaultReturnNode = afterRes.replacement;
+            defaultReturnNode = afterRes.replacement!;
         }
     }
     return defaultReturnNode;
@@ -541,7 +546,7 @@ const prettyPrint = (obj: any, depth: number = 0) => {
     }
 
     if (typeof obj === "object" && !Array.isArray(obj)) {
-        return  Object.entries(obj).map(([key, val]) => {
+        return Object.entries(obj).map(([key, val]) => {
             return `${'    '.repeat(Math.max(depth - 1, 0))}${depth === 0 ? "" : "╰── "}${key}:\n${prettyPrint(val, depth + 1)}`;
         }).join("\n");
     } else if (Array.isArray(obj)) {
@@ -557,7 +562,6 @@ const prettyPrint = (obj: any, depth: number = 0) => {
 function removeUnusedRDTFields(node: RDTNode): any {
     const duplicate: Partial<RDTNode> = { ...node };
     delete duplicate.metadata;
-    delete duplicate.rdtContext;
     delete duplicate.id;
     delete duplicate.type;
     delete (duplicate as any).typeDef;
@@ -568,6 +572,9 @@ function removeUnusedRDTFields(node: RDTNode): any {
 export function toRDTreeString(rdt: RDTNode) {
     const output = walkDFS(rdt, {
         onAfter: (ctx) => {
+            if (ctx.node.type === "RDTReference" || ctx.node.type === "RDTSourceConstant") {
+                return { replacement: debugRDTNode(ctx.node) as any };
+            }
             return {
                 replacement: {
                     [debugRDTNode(ctx.node)]: removeUnusedRDTFields(ctx.node),
@@ -590,6 +597,10 @@ export function debugRDTNode(node: RDTNode) {
         name = "root";
     } else if (node.type === "RDTMath") {
         name = node.operator;
+    } else if (node.type === "RDTReference") {
+        name = node.name ?? node.referenceId;
+    } else if (node.type === "RDTSourceConstant") {
+        name = node.value;
     }
 
     return `${name}:${node.type}`;

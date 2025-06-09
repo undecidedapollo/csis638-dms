@@ -108,10 +108,18 @@ LetExpr
     }
 
 IfExpr
-  = "$if" _? "(" _? condition:Expr _? ")" _? thenExpr:OrderedExpressionsBlock elseExpr:(_? @ElseExpr)? {
+  = "$if" _? "(" _? condition:Expr _? ")" _? thenExpr:OrderedExpressionsBlock elseExpr:(_? @(ElseIfExpr/ElseExpr))? {
       return { type: "IfExpr", condition, then: thenExpr, else: elseExpr || null };
     }
-  / "$if" _? "(" _? condition:Expr _? ")" _? thenExpr:Expr elseExpr:(_? @ElseExpr)? {
+  / "$if" _? "(" _? condition:Expr _? ")" _? thenExpr:Expr elseExpr:(_? @(ElseIfExpr/ElseExpr))? {
+      return { type: "IfExpr", condition, then: thenExpr, else: elseExpr || null };
+    }
+
+ElseIfExpr
+  = "$elif" _? "(" _? condition:Expr _? ")" _? thenExpr:OrderedExpressionsBlock elseExpr:(_? @ElseIfExpr)? {
+      return { type: "IfExpr", condition, then: thenExpr, else: elseExpr || null };
+    }
+  / "$elif" _? "(" _? condition:Expr _? ")" _? thenExpr:Expr elseExpr:(_? @ElseIfExpr)? {
       return { type: "IfExpr", condition, then: thenExpr, else: elseExpr || null };
     }
 
@@ -125,7 +133,7 @@ LambdaExpr
   / EqualityExpr
 
 EqualityExpr
-  = lhs:AdditiveExpr _ operator:"==" _ rhs:EqualityExpr { return {type: "operator", operator, lhs, rhs}; }
+  = lhs:AdditiveExpr _ operator:("=="/"<"/">") _ rhs:EqualityExpr { return {type: "operator", operator, lhs, rhs}; }
   / AdditiveExpr
 
 AdditiveExpr
