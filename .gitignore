@@ -2,3 +2,4 @@
 node_modules/
 src/dsl.cjs
 src/dsl.d.ts
+out/

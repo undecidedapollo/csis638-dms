@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { DefinitionNode, DefinitionPropertyNode } from "./ast.types";
+import { DefinitionNode, DefinitionPropertyNode, IdentifierNode } from "./ast.types";
 
 let id = 0;
 export class RDTContext {
@@ -42,13 +42,20 @@ interface HasMetadata {
     },
 }
 
+export interface RDTAssignment extends HasMetadata {
+    id: string;
+    type: "RDTAssignment";
+    name: string;
+    value: RDTComputeNode;
+    rdtContext: RDTContext;
+}
+
 export interface RDTDefinition extends HasMetadata {
     id: string;
     type: "RDTDefinition";
     node: DefinitionNode;
     rdtContext: RDTContext;
     properties: Array<RDTProperty>;
-
 }
 
 export interface RDTSimpleProperty extends HasMetadata {
@@ -128,7 +135,7 @@ export interface RDTMath extends HasMetadata {
     id: string;
     type: "RDTMath";
     rdtContext: RDTContext;
-    operator: "*" | "/" | "+" | "-";
+    operator: "*" | "/" | "+" | "-" | "==";
     lhs: RDTComputeNode;
     rhs: RDTComputeNode;
 }
@@ -158,25 +165,73 @@ export interface RDTInvoke extends HasMetadata {
     args: RDTComputeNode[];
 }
 
+export interface RDTOrderedExpressions extends HasMetadata {
+    id: string;
+    type: "RDTOrderedExpressions";
+    rdtContext: RDTContext;
+    exprs: RDTComputeNode[];
+}
+
+export interface RDTNull extends HasMetadata {
+    id: string;
+    type: "RDTNull";
+    rdtContext: RDTContext;
+}
+
+export interface RDTConditional extends HasMetadata {
+    id: string;
+    type: "RDTConditional";
+    rdtContext: RDTContext;
+    condition: RDTComputeNode;
+    then: RDTComputeNode;
+    else: RDTComputeNode;
+}
+
+export interface RDTBinding extends HasMetadata {
+    id: string;
+    type: "RDTBinding";
+    rdtContext: RDTContext;
+    typeDef: RDTTypeDef;
+    name: string;
+    value: RDTComputeNode;
+    next: RDTComputeNode;
+}
+
+export interface RDTSideEffect extends HasMetadata {
+    id: string;
+    type: "RDTSideEffect";
+    rdtContext: RDTContext;
+    typeDef: RDTTypeDef;
+    expr: RDTComputeNode;
+    next: RDTComputeNode;
+}
+
 export type RDTComputeNode =
+    | RDTOrderedExpressions
     | RDTSourceContext
     | RDTSourceConstant
     | RDTPropertyAccess
     | RDTMath
     | RDTFunction
     | RDTSourceRuntime
-    | RDTInvoke;
+    | RDTInvoke
+    | RDTNull
+    | RDTConditional
+    | RDTBinding
+    | RDTSideEffect
+    | RDTReference;
 
 export interface RDTRoot extends HasMetadata {
     id: string;
     type: "RDTRoot",
     rdtContext: RDTContext;
     definitions: RDTDefinition[];
+    assignments: RDTAssignment[];
 }
 
-export interface RDTRWReference extends HasMetadata {
+export interface RDTReference extends HasMetadata {
     id: string;
-    type: "RDTRWReference";
+    type: "RDTReference";
     rdtContext: RDTContext;
     referenceId: string;
 }
@@ -191,4 +246,13 @@ export interface RDTRWRoot extends HasMetadata {
     read: RDTNode,
 }
 
-export type RDTNode = RDTComputeNode | RDTProperty | RDTDefinition | RDTRoot | RDTRWReference | RDTRWRoot;
+
+
+export type RDTNode =
+    | RDTComputeNode
+    | RDTProperty
+    | RDTDefinition
+    | RDTRoot
+    | RDTReference
+    | RDTRWRoot
+    | RDTAssignment;

@@ -1,7 +1,17 @@
 Start
-  = (_? def:Definition _? { return def; })+
+  = (_? def:Statement _? { return def; })+
 
-Definition
+
+Statement 
+  = DefinitionStatement
+  / AssignmentStatement
+
+AssignmentStatement
+  = name:Identifier _? "=" _? value:Expr {
+      return { type: "Assignment", name, value };
+    }
+
+DefinitionStatement
   = name:Identifier _? "{" _ props:DefinitionBodyList? _ "}" {
       return { type: "Definition", name, properties: props || [] };
     }
@@ -73,16 +83,42 @@ Context
 
 Expr
   = ReturnExpr
+  / OrderedExpressionsBlock
   / ObjectLiteralExpr
+  / LetExpr
+  / IfExpr
+  / LambdaExpr
 
 ReturnExpr
-  = "return" _? expr:LambdaExpr { return {type: "ReturnExpr", expr}; }
+  = "$return" _? expr:Expr { return {type: "ReturnExpr", expr}; }
+
+OrderedExpressionsBlock
+  = "{" _? head:Expr tail:(_spaces? [;\n]+ _? @Expr)* _? ";"? _? "}" {
+      return {type: "OrderedExpressionsBlock", exprs: [head].concat(tail)};
+  }
 
 ObjectLiteralExpr
   = "{" _? props:ObjectLiteralBodyList? _? "}" {
     return { type: "ObjectLiteralExpr", properties: props || [] };
   }
-  / LambdaExpr
+
+LetExpr
+  = "$let" _? identifier:Identifier _? "=" _? value:Expr {
+      return { type: "LetExpr", identifier, value };
+    }
+
+IfExpr
+  = "$if" _? "(" _? condition:Expr _? ")" _? thenExpr:OrderedExpressionsBlock elseExpr:(_? @ElseExpr)? {
+      return { type: "IfExpr", condition, then: thenExpr, else: elseExpr || null };
+    }
+  / "$if" _? "(" _? condition:Expr _? ")" _? thenExpr:Expr elseExpr:(_? @ElseExpr)? {
+      return { type: "IfExpr", condition, then: thenExpr, else: elseExpr || null };
+    }
+
+// No need to make this part of the ast since it is only the ever the else case of an if statement.
+ElseExpr
+  = "$else" _? expr:OrderedExpressionsBlock { return expr; }
+  / "$else" _? expr:Expr { return expr; }
 
 LambdaExpr
   = "(" params:ParamList? ")" _ "=>" _ body:Expr { return {type: "LambdaExpr", params, body}; }
@@ -114,9 +150,6 @@ PrimaryExpr
   / Identifier
   / Context
   / "(" _ val:ObjectLiteralExpr _ ")" { return {type: "Parenthesis", val}; }
-  
-
-
 
 _ = [ \t\n\r]*
 _spaces = [ \t]*

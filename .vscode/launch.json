@@ -9,7 +9,7 @@
       "preLaunchTask": "npm: gen",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "tsx"],
-      "args": ["src/index.ts"],
+      "args": ["src/index.ts", "e2.dml", "2"],
       "cwd": "${workspaceFolder}",
       "sourceMaps": true,
       "resolveSourceMapLocations": [

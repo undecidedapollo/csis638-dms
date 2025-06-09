@@ -2,16 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { AST } from './ast.types';
 import parser from './dsl.cjs';
 import { RDTContext, RDTDerivedProperty, RDTNode, RDTRoot, RDTRWRoot } from './rdt.types';
-import { convertToRDT, debugRDTNode, genRdtId, replacer, resolveTypes, walkDFS } from './rdt';
+import { convertToRDT, debugRDTNode, genRdtId, replacer, replacer2, resolveTypes, toRDTreeString, walkDFS } from './rdt';
 import { generateSDK } from './genSDK';
 import fs from "node:fs";
 import { generateDDL } from './genDDL';
 
 if (!process.argv[2]) {
     throw new Error(`Expected <filename> to be provided`);
-} 
+}
+
+let targetStage = process.argv[3] ? parseInt(process.argv[3], 10) : Number.MAX_SAFE_INTEGER;
+if (!Number.isSafeInteger(targetStage) || targetStage <= 0) {
+    throw new Error(`Expected <targetStage> to be an integer > 0. Received: ${process.argv[3]}`);
+}
 
 const input = await fs.promises.readFile(process.argv[2], "utf-8");
+
 
 // const input = `
 //     Transaction {
@@ -46,13 +52,16 @@ function getIntermediateId(node: RDTDerivedProperty): string {
     return `${node.node.identifier.value}_int_${count}`;
 }
 
-try {
+async function main() {
     const ast: AST = parser.parse(input);
-    console.log(JSON.stringify(ast, null, 2));
+    await fs.promises.writeFile("out/ast", JSON.stringify(ast, null, 2));
+    if (targetStage === 1) return;
     const rdtCtx = new RDTContext();
     const rdt = convertToRDT(ast, rdtCtx);
-    console.log(JSON.stringify(rdt, replacer, 2));
-    console.log(JSON.stringify(rdtCtx.tree(), null, 2));
+    console.log(toRDTreeString(rdt));
+    await fs.promises.writeFile("out/rdt", JSON.stringify(rdt, replacer2, 2));
+    await fs.promises.writeFile("out/rdtctx", JSON.stringify(rdtCtx.tree(), null, 2));
+    if (targetStage === 2) return;
     const finalOutput = walkDFS(rdt, {
         onAfter: (ctx) => {
             // console.log(ctx.node.type, ctx.lineage.length, !!ctx.node.rdtContext);
@@ -73,12 +82,16 @@ try {
             }
         }
     });
-    console.log(JSON.stringify(finalOutput, replacer, 2));
+    await fs.promises.writeFile("out/rdt-resolved", JSON.stringify(finalOutput, replacer, 2));
+    if (targetStage === 3) return;
+
 
     resolveTypes(finalOutput as RDTRoot);
+    await fs.promises.writeFile("out/rdt-typed", JSON.stringify(finalOutput, replacer, 2));
+    if (targetStage === 4) return;
 
     // TODO: Move this logic to the optimizer side of things. Everything "could" be queryside if required. This isn't true, timeSince: Time.readTime.since(Time.writeTime, "seconds")
-    
+
     const tainted = new Set<string>();
     const writeAst = new Map<string, {
         write: {
@@ -94,28 +107,24 @@ try {
                 if (parent.type === "RDTFunction" && parent.parameters.includes(ctx.node)) {
                     // Don't double record, only record where used.
                     return;
-                } 
+                }
                 for (const ancestor of ctx.lineage) {
                     tainted.add(ancestor.id);
                 }
-                console.log("POST_TAINT", tainted);
             }
         }
     });
     // Split the tree
     const rwSeparatedOutput = walkDFS(finalOutput, {
         onAfter: (ctx) => {
-            console.log(ctx.node.type, ctx.lineage.length, !!ctx.node.rdtContext);
             // This runs at the bottom every time, doesn't matter if in before or after.
             if (ctx.node.type === "RDTSourceRuntime" || ctx.node.type === "SimpleProperty") {
                 // TODO: NOOP ??
             } else if (!tainted.has(ctx.node.id)) {
                 const [parent] = ctx.lineage;
                 if (tainted.has(parent.id)) {
-                    console.log(JSON.stringify(ctx.lineage, replacer, 2));
                     const grandparent = ctx.lineage.find((x) => x.type === "DerivedProperty");
                     if (!grandparent) {
-                        console.log(debugRDTNode(ctx.node), debugRDTNode(parent));
                         throw new Error(`Unable to find root for read / write separation`);
                     }
                     const referenceId = getIntermediateId(grandparent);
@@ -127,7 +136,7 @@ try {
                     return {
                         replacement: {
                             id: referenceId,
-                            type: "RDTRWReference",
+                            type: "RDTReference",
                             rdtContext: ctx.node.rdtContext,
                             referenceId,
                             metadata: {},
@@ -154,13 +163,13 @@ try {
             }
         }
     });
-    console.log(JSON.stringify(rwSeparatedOutput, replacer, 2));
+    await fs.promises.writeFile("out/rdt-rwopt", JSON.stringify(rwSeparatedOutput, replacer, 2));
+    if (targetStage === 4) return;
     const file = generateSDK(rwSeparatedOutput);
-    await fs.promises.writeFile("./gen.ts", file);
+    await fs.promises.writeFile("out/gen.ts", file);
     const sql = generateDDL(rwSeparatedOutput);
-    await fs.promises.writeFile("./gen.sql", sql);
-    console.log(file);
-    // console.log(JSON.stringify(Array.from(tainted.values()).map((x) => debugRDTNode(x)), replacer, 2));
-} catch (e) {
-    console.error('Parse error:', e.stack);
+    await fs.promises.writeFile("out/gen.sql", sql);
+    if (targetStage === 5) return;
 }
+
+main().catch((e) => console.error(e));

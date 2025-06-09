@@ -1,92 +1,31 @@
-Places I need to be:
-
-
-
-CREATE DATABASE dbapp;
-USE dbapp;
-
-    Transaction {
-        id: uuid,
-        bankAccountId: string,
-        amount: number,
-        doubleAmount: (rand: number) => $row.amount * 2 + rand
-    }
-
-
-// Loop through the table definition and generate the string from the ast
-// ?? In the future build out an update system like terraform perhaps where it does diffs and knows how to do different types of changes ??
-CREATE TABLE "Transaction" (
-    "id" TEXT NOT NULL,
-    "bankAccountId" TEXT NOT NULL,
-    "amount" FLOAT NOT NULL,
-    "doubleAmount_int_0" FLOAT NOT NULL
-)
-
-
-
-import { Pool } from 'pg'
- 
-const pool = new Pool({
-  host: 'localhost:26257',
-  user: 'root',
-  max: 5,
-  idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 500,
-});
-
-interface Transaction_Simple {
-    id: string;
-    bankAccountId: string;
-    amount: number;
+RDTNative {
+    constraints: string[]; // ["node"]
 }
 
-interface Transaction_DB_Row {
-    id: string;
-    bankAccountId: string;
-    amount: number;
-    doubleAmount_int_1: number;
+RDTFunction {
+    name: "concat",
+    params: [
+        {
+            type: "RDTParamMany",
+            targetType: string,
+        },
+    ]
 }
 
-interface Transaction {
-    id: string;
-    bankAccountId: string;
-    amount: number;
-    doubleAmount: (rand: number) => number;
+Transaction {
+    id: string,
+    bankAccountId: string,
+    amount: number,
+    doubleAmount: (rand: number) => $row.amount * 2 + rand
 }
 
-function toTransaction_DB_Row(transaction: Transaction_Simple): Transaction_DB_Row {
-    return {
-        ...transaction,
-        doubleAmount_int_1: transaction.amount * 2
-    };
+totalTransactions = () => {
+    return Transaction[].reduce((acc, transaction) => {
+        return acc + transaction.amount;
+    }, 0);
 }
 
-function toFinalTransaction(transaction: Transaction_DB_Row): Transaction {
-    const intermediate = transaction.doubleAmount_int_1;
-    return {
-        id: transaction.id,
-        bankAccountId: transaction.bankAccountId,
-        amount: transaction.amount,
-        doubleAmount: (rand: number) => intermediate + rand
-    };
-}
 
-export class Transaction {
-    static create(pojo: Transaction_Simple): Transaction {
-        if (!pojo.id || !pojo.bankAccountId || typeof pojo.amount !== 'number') {
-            throw new Error('Invalid Transaction data');
-        }
+Let tree compression / RDT Binding Compaction
 
-        let transaction_db_row: Transaction_DB_Row = toTransaction_DB_Row(pojo);
-
-        const res = pool.query(
-            'INSERT INTO "Transaction" ("id", "bankAccountId", "amount", "doubleAmount_int_1") VALUES ($1, $2, $3, $4) RETURNING *',
-            [transaction_db_row.id, transaction_db_row.bankAccountId, transaction_db_row.amount, transaction_db_row.doubleAmount_int_1]
-        );
-        if (res.rowCount === 0) {
-            throw new Error('Failed to create Transaction');
-        }
-        const row = res.rows[0];
-        return toFinalTransaction(row);
-    }
-}
+Side effect representation as part of tree compression, ?? things that take actions need to split the tree so operations appear in order ??

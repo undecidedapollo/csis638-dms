@@ -1,0 +1,36 @@
+ExampleTable {
+    simpleField: number
+}
+
+ findByField = (id: string) => { 
+    $if (123) {
+        $if (456) {
+            $let x = 5
+            $let y = 6
+            $return x + y
+        }
+        5
+    } $else {
+        $return 3
+    }
+
+    $return 10
+ }
+
+findByField2 = (id: string) => { 
+    $if (123) {
+        doSomethingIf1()
+        $if (456) {
+            $return ifa
+        }
+        doSomethingIf2()
+    } $else {
+        doSomethingElse1()
+        $if (456) {
+            $return ifb
+        }
+        doSomethingElse2()
+    }
+
+    $return 10 + 20
+ }

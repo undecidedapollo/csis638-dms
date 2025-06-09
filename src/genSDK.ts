@@ -48,7 +48,7 @@ function toTypescriptLogic(rdt: RDTNode): string {
         return `(${params.join(" ")}) => { return ${toTypescriptLogic(rdt.body)}; }`;
     } else if (rdt.type === "RDTSourceRuntime") {
         return `${rdt.name}`;
-    } else if (rdt.type === "RDTRWReference") {
+    } else if (rdt.type === "RDTReference") {
         return `input["${rdt.referenceId}"]`;
     } else {
         throw new Error(`Unknown RDT when converting to TS logic ${JSON.stringify(rdt, replacer, 2)}`);

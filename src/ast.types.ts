@@ -1,9 +1,17 @@
-export type AST = DefinitionNode[];
+export type AST = StatementNode[];
+
+export type StatementNode = DefinitionNode | AssignmentNode;
 
 export interface DefinitionNode {
     type: "Definition";
     name: IdentifierNode;
     properties: Array<DefinitionPropertyNode | DefinitionFunctionNode>;
+}
+
+export interface AssignmentNode {
+    type: "Assignment";
+    name: IdentifierNode;
+    value: ExprNode;
 }
 
 export interface DefinitionPropertyNode {
@@ -16,7 +24,7 @@ export interface DefinitionFunctionNode {
     type: "DefinitionFunction";
     name: IdentifierNode;
     params: ParamNode[];
-    body: ReturnExprNode;
+    body: ExprNode;
 }
 
 export interface ParamNode {
@@ -25,9 +33,13 @@ export interface ParamNode {
     definition: TypeExprNode | ContextNode | null;
 }
 
+
 export type ExprNode =
     | ReturnExprNode
     | ObjectLiteralExprNode
+    | OrderedExpressionsBlockNode
+    | IfExprNode
+    | LetExprNode
     | LambdaExprNode
     | OperatorExprNode
     | InvokeExprNode
@@ -61,6 +73,25 @@ export interface ObjectLiteralFunctionNode {
     name: IdentifierNode;
     params: ParamNode[];
     body: ExprNode;
+}
+
+
+export interface OrderedExpressionsBlockNode {
+    type: "OrderedExpressionsBlock";
+    exprs: ExprNode[];
+}
+
+export interface IfExprNode {
+    type: "IfExpr";
+    condition: ExprNode;
+    then: ExprNode;
+    else: ExprNode | null;
+}
+
+export interface LetExprNode {
+    type: "LetExpr";
+    identifier: IdentifierNode;
+    value: ExprNode;
 }
 
 export interface LambdaExprNode {
@@ -132,7 +163,7 @@ export type IdentifiesNode =
 | TypeExprNode
 
 export type ASTNode = 
-| DefinitionNode
+| StatementNode
 | DefinitionPropertyNode
 | DefinitionFunctionNode
 | ObjectLiteralFunctionNode
