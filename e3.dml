@@ -16,3 +16,7 @@ addStuff = (num: number) => {
 
     $return sum + 11
 }
+
+addStuff1 = (num: number) => {
+    $return addStuff(num) + 1
+}
