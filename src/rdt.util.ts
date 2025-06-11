@@ -69,6 +69,8 @@ export function debugRDTNode(node: RDTNode) {
         name = node.name ?? name;
     } else if (node.type === "DerivedProperty") {
         name = node.node.identifier.value;
+    } else if (node.type === "SimpleProperty") {
+        name = node.node.identifier.value;
     } else if (node.type === "RDTDefinition") {
         name = node.node.name.value;
     } else if (node.type === "RDTRoot") {

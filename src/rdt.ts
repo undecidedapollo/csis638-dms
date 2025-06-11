@@ -42,7 +42,7 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
             throw new Error(`RDT Operator not supported: ${ast.operator}`);
         }
     } else if (ast.type === "TypeExpr") {
-        if (ast.array) throw new Error("Array type expr not support rdt walker");
+        // if (ast.array) throw new Error("Array type expr not support rdt walker");
         return {
             id: genRdtId(),
             type: "RDTSourceConstant",
@@ -53,7 +53,7 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
             },
             metadata: {},
         };
-    } else if (ast.type === "number" || ast.type === "string") {
+    } else if (ast.type === "number" || ast.type === "string" || ast.type === "identifier") {
         return {
             id: genRdtId(),
             type: "RDTSourceConstant",

@@ -73,7 +73,7 @@ Array
   = "[]"
 
 Identifier
-  = str:$([a-zA-Z_][a-zA-Z0-9_]*) { return {type: "string", value: str}; }
+  = str:$([a-zA-Z_][a-zA-Z0-9_]*) { return {type: "identifier", value: str}; }
 
 Numeric
   = val:$([0-9]+([.][0-9])?) {return {type: "number", value: val};}
@@ -133,31 +133,94 @@ LambdaExpr
   / EqualityExpr
 
 EqualityExpr
-  = lhs:AdditiveExpr _ operator:("=="/"<"/">") _ rhs:EqualityExpr { return {type: "operator", operator, lhs, rhs}; }
-  / AdditiveExpr
+  = head:AdditiveExpr tail:(_? ("=="/"<"/">") _? AdditiveExpr)* {
+      return tail.reduce((left, right) => {
+        // 'right' is an array from the tail match: [whitespace, operator, whitespace, expression]
+        return { type: "operator", operator: right[1], lhs: left, rhs: right[3] };
+      }, head);
+    }
 
 AdditiveExpr
-  = lhs:MultiplicativeExpr _ operator:[+-] _ rhs:AdditiveExpr { return {type: "operator", operator, lhs, rhs}; }
-  / MultiplicativeExpr
+  = head:MultiplicativeExpr tail:(_? [+-] _? MultiplicativeExpr)* {
+      return tail.reduce((left, right) => {
+        return { type: "operator", operator: right[1], lhs: left, rhs: right[3] };
+      }, head);
+    }
 
 MultiplicativeExpr
-  = lhs:InvokeExpr _ operator:[*/] _ rhs:MultiplicativeExpr { return {type: "operator", operator, lhs, rhs}; }
-  / InvokeExpr
+  = head:InvokeExpr tail:(_? [*/] _? InvokeExpr)* {
+      return tail.reduce((left, right) => {
+        return { type: "operator", operator: right[1], lhs: left, rhs: right[3] };
+      }, head);
+    }
 
 InvokeExpr
   = lhs:DotExpression _? "(" args: ArgList? ")" { return {type: "InvokeExpr", lhs, args: args ?? []}; }
   / DotExpression
 
 DotExpression
-  = lhs:PrimaryExpr _? [.] _? rhs:DotExpression { return { type: "operator", operator: ".", lhs, rhs}; }
-  / PrimaryExpr
+  = head:PrimaryExpr tail:(_? "." _? @Identifier)* {
+      return tail.reduce((left, right) => {
+        return { type: "operator", operator: ".", lhs: left, rhs: right };
+      }, head);
+    }
+    / PrimaryExpr
 
 PrimaryExpr
   = TypeExpr
   / Numeric
+  / StringLiteral
   / Identifier
   / Context
   / "(" _ val:ObjectLiteralExpr _ ")" { return {type: "Parenthesis", val}; }
 
 _ = [ \t\n\r]*
 _spaces = [ \t]*
+
+StringLiteral
+  = '"' chars:DoubleStringCharacters '"' { return {type: "string", value: chars.join("")}; }
+  / "'" chars:SingleStringCharacters "'" { return {type: "string", value: chars.join("")}; }
+
+DoubleStringCharacters
+  = DoubleStringCharacter*
+
+DoubleStringCharacter
+  = !('"' / '\\') .  { return text(); }
+  / '\\' escape:EscapeSequence { return escape; }
+
+SingleStringCharacters
+  = SingleStringCharacter*
+
+SingleStringCharacter
+  = !("'" / '\\') . { return text(); }
+  / '\\' escape:EscapeSequence { return escape; }
+
+EscapeSequence
+  = 'n'  { return '\n'; }
+  / 'r'  { return '\r'; }
+  / 't'  { return '\t'; }
+  / 'b'  { return '\b'; }
+  / 'f'  { return '\f'; }
+  / 'v'  { return '\v'; }
+  / '\\' { return '\\'; }
+  / "'"  { return "'"; }
+  / '"'  { return '"'; }
+  / '0'  { return '\0'; }
+  / 'x' h1:HexDigit h2:HexDigit {
+      return String.fromCharCode(parseInt(h1 + h2, 16));
+    }
+  / 'u' code:UnicodeEscape { return code; }
+
+UnicodeEscape
+  = '{' hex:HexDigits '}' {
+      return String.fromCodePoint(parseInt(hex, 16));
+    }
+  / h1:HexDigit h2:HexDigit h3:HexDigit h4:HexDigit {
+      return String.fromCharCode(parseInt(h1 + h2 + h3 + h4, 16));
+    }
+
+HexDigit
+  = [0-9a-fA-F]
+
+HexDigits
+  = [0-9a-fA-F]+

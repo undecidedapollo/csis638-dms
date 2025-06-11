@@ -47,6 +47,7 @@ export type ExprNode =
     | TypeExprNode
     | NumericNode
     | IdentifierNode
+    | StringNode
     | ContextNode
     | ParenthesisNode;
 
@@ -138,8 +139,12 @@ export interface NumericNode {
     value: string;
 }
 
-export interface IdentifierNode {
+export interface StringNode {
     type: "string";
+    value: string;
+}
+export interface IdentifierNode {
+    type: "identifier";
     value: string;
 }
 
