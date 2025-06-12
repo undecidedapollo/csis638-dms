@@ -3,13 +3,13 @@
   "tasks": [
     {
       "type": "npm",
-      "script": "gen",
+      "script": "vscodeprepare",
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "label": "npm: gen",
-      "detail": "Generate parser using peggy",
+      "label": "npm: vscodeprepare",
+      "detail": "VSCode Prepare",
       "presentation": {
         "reveal": "silent",
         "panel": "shared",

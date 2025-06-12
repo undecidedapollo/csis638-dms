@@ -30,7 +30,7 @@ export interface DefinitionFunctionNode {
 export interface ParamNode {
     type: "Param";
     identifier: IdentifierNode;
-    definition: TypeExprNode | ContextNode | null;
+    definition: IdentifierNode | ContextNode | null;
 }
 
 
@@ -44,7 +44,7 @@ export type ExprNode =
     | OperatorExprNode
     | InvokeExprNode
     | DotExpressionNode
-    | TypeExprNode
+    | PostfixOperator
     | NumericNode
     | IdentifierNode
     | StringNode
@@ -122,35 +122,34 @@ export interface DotExpressionNode {
 }
 
 export type PrimaryExprNode =
-    | TypeExprNode
     | NumericNode
     | IdentifierNode
     | ContextNode
     | ParenthesisNode;
 
-export interface TypeExprNode {
-    type: "TypeExpr";
-    base: IdentifierNode;
-    array: boolean;
-}
-
 export interface NumericNode {
-    type: "number";
+    type: "NumericLiteral";
     value: string;
 }
 
 export interface StringNode {
-    type: "string";
+    type: "StringLiteral";
     value: string;
 }
 export interface IdentifierNode {
-    type: "identifier";
+    type: "Identifier";
     value: string;
 }
 
 export interface ContextNode {
-    type: "context";
+    type: "ContextLiteral";
     value: IdentifierNode | null;
+}
+
+export interface PostfixOperator {
+    type: "PostfixOperator";
+    operator: "[]";
+    operand: ExprNode;
 }
 
 export interface ParenthesisNode {
@@ -158,14 +157,13 @@ export interface ParenthesisNode {
     val: ExprNode;
 }
 
-export type IdentifiesNode = 
+export type IdentifiesNode =
 | DefinitionNode 
 | DefinitionPropertyNode 
 | DefinitionFunctionNode
 | ObjectLiteralFunctionNode 
 | ObjectLiteralPropertyNode 
-| ParamNode 
-| TypeExprNode
+| ParamNode
 
 export type ASTNode = 
 | StatementNode

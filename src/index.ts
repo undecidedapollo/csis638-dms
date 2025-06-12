@@ -1,15 +1,14 @@
-import { randomUUID } from 'node:crypto';
-import { AST } from './ast.types';
+import { AST } from './ast.types.js';
 import parser from './dsl.cjs';
-import { RDTContext, RDTDerivedProperty, RDTNode, RDTReference, RDTRoot, RDTRWRoot } from './rdt.types';
-import { convertToRDT, genRdtId, toRDTreeString, walkDFS } from './rdt';
-import { generateSDK } from './genSDK';
+import { RDTContext, RDTDerivedProperty, RDTNode, RDTReference, RDTRoot, RDTRWRoot } from './rdt.types.js';
+import { convertToRDT, genRdtId, toRDTreeString, walkDFS } from './rdt.js';
 import fs from "node:fs";
-import { generateDDL } from './genDDL';
-import { resolveRdtReferences } from './rdtReferenceResolver';
-import { removeRedundentReferences } from './rdtRemoveRedundentReferences';
-import { debugRDTNode, replacer, replacer2 } from './rdt.util';
-import { resolveTypes } from './rdtTypeSystem';
+import { resolveRdtReferences } from './rdtReferenceResolver.js';
+import { removeRedundentReferences } from './rdtRemoveRedundentReferences.js';
+import { debugRDTNode, replacer } from './rdt.util.js';
+// import { generateDDL } from './genDDL';
+// import { generateSDK } from './genSDK';
+import { resolveTypes } from './rdtTypeSystem.js';
 
 if (!process.argv[2]) {
     throw new Error(`Expected <filename> to be provided`);
@@ -22,30 +21,6 @@ if (!Number.isSafeInteger(targetStage) || targetStage <= 0) {
 
 const input = await fs.promises.readFile(process.argv[2], "utf-8");
 
-
-// const input = `
-//     Transaction {
-//         id: string,
-//         bankAccountId: string,
-//         amount: number,
-//         doubleAmount: (rand: number) => $row.amount * 2 + rand
-//     }
-// `;
-
-// const input = `
-//     BankAccount { 
-//         accountId: string,
-//         balance: $.transactions.reduce((acc, tx) => acc + tx.amount, 0),
-//         transactions: Transaction[].filter((tx) => tx.bankAccountId == $.accountId)
-//     }
-
-//     Transaction {
-//         id: uuid,
-//         bankAccountId: string,
-//         amount: number
-//     }
-// `;
-
 function getIntermediateId(node: RDTDerivedProperty): string {
     if (!node.metadata["intermediateidincr"]) {
         node.metadata["intermediateidincr"] = 0;
@@ -53,7 +28,7 @@ function getIntermediateId(node: RDTDerivedProperty): string {
 
     const count = (node.metadata["intermediateidincr"]++).toString();
 
-    return `${node.node.identifier.value}_int_${count}`;
+    return `${node.name}_int_${count}`;
 }
 
 async function main() {
@@ -61,19 +36,18 @@ async function main() {
     await fs.promises.writeFile("out/ast", JSON.stringify(ast, null, 2));
     if (targetStage === 1) return;
     const rdt = convertToRDT(ast);
-    await fs.promises.writeFile("out/rdt", JSON.stringify(rdt, replacer2, 2));
+    await fs.promises.writeFile("out/rdt", JSON.stringify(rdt, replacer, 2));
     await fs.promises.writeFile("out/rdttree", toRDTreeString(rdt));
     if (targetStage === 2) return;
 
-    const {context: rdtCtx2, rdt: finalOutputTemp} = resolveRdtReferences(rdt);
+    const {context: rdtCtx2, rdt: finalOutputTemp, ctxPerNode} = resolveRdtReferences(rdt);
     const {rdt: finalOutput} = removeRedundentReferences(finalOutputTemp);
     await fs.promises.writeFile("out/rdt-resolved", JSON.stringify(finalOutput, replacer, 2));
     await fs.promises.writeFile("out/rdt-resolvedctx", JSON.stringify(rdtCtx2.tree(), null, 2));
     await fs.promises.writeFile("out/rdt-resolvedtree", toRDTreeString(finalOutput));
     if (targetStage === 3) return;
 
-
-    resolveTypes(finalOutput as RDTRoot);
+    resolveTypes(finalOutput as RDTRoot, ctxPerNode);
     await fs.promises.writeFile("out/rdt-typed", JSON.stringify(finalOutput, replacer, 2));
     await fs.promises.writeFile("out/rdt-typedtree", toRDTreeString(finalOutput));
     if (targetStage === 4) return;
@@ -151,10 +125,10 @@ async function main() {
     });
     await fs.promises.writeFile("out/rdt-rwopt", JSON.stringify(rwSeparatedOutput, replacer, 2));
     if (targetStage === 4) return;
-    const file = generateSDK(rwSeparatedOutput);
-    await fs.promises.writeFile("out/gen.ts", file);
-    const sql = generateDDL(rwSeparatedOutput);
-    await fs.promises.writeFile("out/gen.sql", sql);
+    // const file = generateSDK(rwSeparatedOutput);
+    // await fs.promises.writeFile("out/gen.ts", file);
+    // const sql = generateDDL(rwSeparatedOutput);
+    // await fs.promises.writeFile("out/gen.sql", sql);
     if (targetStage === 5) return;
 }
 

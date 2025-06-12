@@ -1,5 +1,4 @@
-import { IdentifiesNode } from "./ast.types";
-import { RDTNode, RDTTypeDef } from "./rdt.types";
+import { RDTNode, RDTTypeDef } from "./rdt.types.js";
 
 export function getTypeMetadata(node: RDTNode, options?: { returnRawBinding?: boolean}): RDTTypeDef | undefined {
     let res = node.metadata["typeinfo"] as RDTTypeDef;
@@ -10,32 +9,8 @@ export function getTypeMetadata(node: RDTNode, options?: { returnRawBinding?: bo
     return res;
 }
 
-export function getIdentifierName(ast: IdentifiesNode) {
-    if (ast.type === "DefinitionProperty" || ast.type === "Param" || ast.type === "ObjectLiteralProperty") {
-        return ast.identifier.value;
-    }
-    if (ast.type === "Definition" || ast.type === "DefinitionFunction" || ast.type === "ObjectLiteralFunction") {
-        return ast.name.value;
-    }
-    if (ast.type === "TypeExpr") {
-        return ast.base.value;
-    }
-}
-
 export const replacer = (key, value) => {
-    if (key === "node") {
-        return `${getIdentifierName(value) ?? "unknown"}:${value.type ?? "unknown"}`;
-    } else if (key === "rdtContext") {
-        return undefined;
-    } else {
-        return value;
-    }
-};
-
-export const replacer2 = (key, value) => {
-    if (key === "node") {
-        return `${getIdentifierName(value) ?? "unknown"}:${value.type ?? "unknown"}`;
-    } else if (key === "rdtContext" || key === "metadata" || key === "typeDef") {
+    if (key === "rdtContext") {
         return undefined;
     } else {
         return value;
@@ -45,7 +20,10 @@ export const replacer2 = (key, value) => {
 export function debugRDTType(type?: RDTTypeDef) {
     if (!type) return "unknown";
     if (type.type === "RDTTypeUnknown") return "unknown";
-    if (type.type === "RDTTypeIdentifier") return type.name;
+    if (type.type === "string") return "string";
+    if (type.type === "number") return "number";
+    if (type.type === "boolean") return "boolean";
+    if (type.type === "RDTTypeReference") return `ref(${type.name})`;
     if (type.type === "RDTObjectTypeDefinition") {
         return `object(${Object.entries(type.properties).map(([key, value]) => `${key}: ${debugRDTType(value)}`).join(", ")})`;
     }
@@ -58,6 +36,9 @@ export function debugRDTType(type?: RDTTypeDef) {
     if (type.type === "RDTTypeFunctionDefinition") {
         return `(${Object.entries(type.params).map(([key, value]) => `${key}: ${debugRDTType(value)}`).join(", ")}) => ${debugRDTType(type.returns)}`;
     }
+    if (type.type === "RDTTypeArrayDefinition") {
+        return `array(${debugRDTType(type.subType)})`;
+    }
 
     throw new Error(`Unknown RDT type: ${JSON.stringify(type, replacer, 2)}`);
 }
@@ -68,19 +49,21 @@ export function debugRDTNode(node: RDTNode) {
     if (node.type === "RDTFunction") {
         name = node.name ?? name;
     } else if (node.type === "DerivedProperty") {
-        name = node.node.identifier.value;
+        name = node.name;
     } else if (node.type === "SimpleProperty") {
-        name = node.node.identifier.value;
+        name = node.name;
     } else if (node.type === "RDTDefinition") {
-        name = node.node.name.value;
+        name = node.name;
     } else if (node.type === "RDTRoot") {
         name = "root";
     } else if (node.type === "RDTMath") {
         name = node.operator;
     } else if (node.type === "RDTReference") {
         name = node.name ?? node.referenceId;
-    } else if (node.type === "RDTSourceConstant") {
+    } else if (node.type === "RDTStringLiteral" || node.type === "RDTNumericLiteral" || node.type === "RDTIdentifier") {
         name = node.value;
+    } else if (node.type === "RDTSourceContext") {
+        name = `$${node.name}`;
     }
 
     return `${name}:${node.type} ${debugRDTType(getTypeMetadata(node, { returnRawBinding: true }))}`;

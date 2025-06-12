@@ -1,10 +1,10 @@
 BankAccount { 
     accountId: string,
-    balance: $row.transactions.reduce((acc, tx) => acc + tx.amount, 0),
-    transactions: Transaction[].filter((tx) => tx.bankAccountId == $.accountId)
+    balance: $row.transactions.reduce((acc: number, tx: Transaction) => acc + tx.amount, 0),
+    transactions: Transaction[].filter((tx: Transaction) => tx.bankAccountId == $row.accountId)
 }
 Transaction {
-    id: uuid,
+    id: string,
     bankAccountId: string,
     amount: number
 }

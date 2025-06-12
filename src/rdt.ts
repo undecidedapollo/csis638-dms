@@ -1,8 +1,8 @@
 
 import { randomUUID } from "node:crypto";
-import { AST, ASTNode, IdentifiesNode, ReturnExprNode } from "./ast.types";
-import { RDTAssignment, RDTBinding, RDTComputeNode, RDTConditional, RDTContext, RDTDefinition, RDTDerivedProperty, RDTFunction, RDTMath, RDTNode, RDTNull, RDTProperty, RDTReference, RDTReturn, RDTRoot, RDTSideEffect, RDTSimpleProperty, RDTSourceContext, RDTSourceRuntime, RDTTypeContext, RDTTypeDef, RDTTypeIdentifier, RDTTypeUnknown } from "./rdt.types";
-import { debugRDTNode, getTypeMetadata, replacer, replacer2 } from "./rdt.util";
+import { AST, ASTNode, ReturnExprNode } from "./ast.types.js";
+import { RDTAssignment, RDTBinding, RDTComputeNode, RDTConditional, RDTDefinition, RDTDerivedProperty, RDTFunction, RDTMath, RDTNode, RDTNull, RDTPostfix, RDTProperty, RDTReference, RDTReturn, RDTRoot, RDTSideEffect, RDTSimpleProperty, RDTSourceRuntime, RDTStringLiteral, RDTTypeBoolean, RDTTypeContext, RDTTypeDef, RDTTypeNumber, RDTTypeReference, RDTTypeString } from "./rdt.types.js";
+import { debugRDTNode, replacer } from "./rdt.util.js";
 
 export function genRdtId() {
     return randomUUID();
@@ -41,75 +41,71 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
         else {
             throw new Error(`RDT Operator not supported: ${ast.operator}`);
         }
-    } else if (ast.type === "TypeExpr") {
-        // if (ast.array) throw new Error("Array type expr not support rdt walker");
+    } else if (ast.type === "NumericLiteral") {
         return {
             id: genRdtId(),
-            type: "RDTSourceConstant",
-            value: ast.base.value,
-            typeDef: {
-                type: "RDTTypeIdentifier",
-                name: "string",
-            },
-            metadata: {},
-        };
-    } else if (ast.type === "number" || ast.type === "string" || ast.type === "identifier") {
-        return {
-            id: genRdtId(),
-            type: "RDTSourceConstant",
+            type: "RDTNumericLiteral",
             value: ast.value,
-            typeDef: {
-                type: "RDTTypeIdentifier",
-                name: ast.type,
-            },
             metadata: {},
         };
-    } else if (ast.type === "context") {
+    } else if (ast.type === "StringLiteral") {
+        return {
+            id: genRdtId(),
+            type: "RDTStringLiteral",
+            value: ast.value,
+            metadata: {},
+        };
+    } else if (ast.type === "Identifier") {
+        return {
+            id: genRdtId(),
+            type: "RDTIdentifier",
+            value: ast.value,
+            metadata: {},
+        };
+    } else if (ast.type === "ContextLiteral") {
         return {
             id: genRdtId(),
             type: "RDTSourceContext",
-            typeDef: {
-                type: "RDTTypeContext",
-                name: ast.value?.value,
-            },
+            name: ast.value?.value ?? "",
             metadata: {},
         };
     } else if (ast.type === "Param") {
-        if (ast.definition?.type === "TypeExpr") {
-            if (ast.definition?.array) throw new Error("rdt param type is array");
-            return {
-                id: genRdtId(),
-                type: "RDTSourceRuntime",
-                name: ast.identifier.value,
-                typeDef: {
-                    type: "RDTTypeIdentifier",
-                    name: ast.definition.base.value,
-                },
-                metadata: {},
-            } satisfies RDTSourceRuntime;
-        } else if (ast.definition?.type === "context") {
-            return {
-                id: genRdtId(),
-                type: "RDTSourceContext",
-                name: ast.identifier.value,
-                typeDef: {
-                    type: "RDTTypeContext",
-                    name: ast.definition.value?.value,
-                },
-                metadata: {},
-            } satisfies RDTSourceContext;
-        } else {
-            const res = {
-                id: genRdtId(),
-                type: "RDTSourceRuntime",
-                name: ast.identifier.value,
-                typeDef: {
-                    type: "RDTTypeUnknown",
-                },
-                metadata: {},
-            } satisfies RDTSourceRuntime;
-            return res;
+        let typeDef: RDTTypeDef | undefined;
+        if (ast.definition?.type === "ContextLiteral") {
+            typeDef = {
+                type: "RDTTypeContext",
+                name: ast.definition.value?.value ?? "",
+            } satisfies RDTTypeContext;
+        } else if (ast.definition?.type === "Identifier") {
+            if (ast.definition.value === "string") {
+                typeDef = {
+                    type: "string",
+                } satisfies RDTTypeString;
+            } else if (ast.definition.value === "number") {
+                typeDef = {
+                    type: "number",
+                } satisfies RDTTypeNumber;
+            }
+            else if (ast.definition.value === "boolean") {
+                typeDef = {
+                    type: "boolean",
+                } satisfies RDTTypeBoolean;
+            } else {
+                typeDef = {
+                    type: "RDTTypeReference",
+                    name: ast.definition.value,
+                } satisfies RDTTypeReference;
+            }
         }
+
+        return {
+            id: genRdtId(),
+            type: "RDTSourceRuntime",
+            name: ast.identifier.value,
+            metadata: {
+                ["typeAnnotation"]: typeDef,
+            },
+        } satisfies RDTSourceRuntime;
     } else if (ast.type === "LambdaExpr") {
         const parameters = ast.params.map((param) => rdtExpressionWalker(param));
         const body = rdtExpressionWalker(ast.body);
@@ -154,7 +150,7 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
         return exprs.reduce((acc: RDTComputeNode, curr) => {
             if (curr.type === "RDTBinding") {
                 if (curr.next.type !== "RDTNull") {
-                    throw new Error(`Unsure how to handle RDTBinding with next node: ${JSON.stringify(curr, replacer2, 2)}`);
+                    throw new Error(`Unsure how to handle RDTBinding with next node: ${JSON.stringify(curr, replacer, 2)}`);
                 }
                 curr.next = acc;
                 return curr;
@@ -206,9 +202,6 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
                     metadata: {
                         "systemGenerated": true,
                     },
-                    typeDef: {
-                        type: "RDTTypeUnknown",
-                    },
                     name: identifier,
                     value: acc,
                     next: next as RDTComputeNode,
@@ -217,9 +210,6 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
                 return {
                     id: genRdtId(),
                     type: "RDTSideEffect",
-                    typeDef: {
-                        type: "RDTTypeUnknown",
-                    },
                     expr: curr,
                     next: acc,
                     metadata: {},
@@ -244,10 +234,6 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
         return {
             id: genRdtId(),
             type: "RDTBinding",
-            typeDef: {
-                // TODO: type not defined currently, add this to ast support
-                type: "RDTTypeUnknown",
-            },
             name: ast.identifier.value,
             value: val,
             next: rdtNull(),
@@ -260,6 +246,14 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
             metadata: {},
             value: rdtExpressionWalker((ast as ReturnExprNode).expr),
         } satisfies RDTReturn;
+    } else if (ast.type === "PostfixOperator") {
+        return {
+            id: genRdtId(),
+            type: "RDTPostfix",
+            operator: ast.operator,
+            operand: rdtExpressionWalker(ast.operand),
+            metadata: {},
+        } satisfies RDTPostfix;
     } else {
         throw new Error(`Unable to rdt walk for ast type: ${ast.type} node: ${JSON.stringify(ast, null, 2)}`);
     }
@@ -281,7 +275,7 @@ export function astWalker(ast: ASTNode): RDTNode {
         const def: RDTDefinition = {
             id: genRdtId(),
             type: "RDTDefinition",
-            node: ast,
+            name: ast.name.value,
             properties: [],
             metadata: {},
         };
@@ -295,21 +289,43 @@ export function astWalker(ast: ASTNode): RDTNode {
         }
         return def;
     } else if (ast.type === "DefinitionProperty") {
-        if (ast.definition.type === "TypeExpr") {
-            if (ast.definition.array) throw new Error(`Table aliasing not supported, due to "${ast.definition.base.value}[]"`);
+        if (ast.definition.type === "Identifier") {
+            let typeDef: RDTTypeDef;
+            if (ast.definition.value === "string") {
+                typeDef = {
+                    type: "string",
+                } satisfies RDTTypeString;
+            } else if (ast.definition.value === "number") {
+                typeDef = {
+                    type: "number",
+                } satisfies RDTTypeNumber;
+            }
+            else if (ast.definition.value === "boolean") {
+                typeDef = {
+                    type: "boolean",
+                } satisfies RDTTypeBoolean;
+            } else {
+                typeDef = {
+                    type: "RDTTypeReference",
+                    name: ast.definition.value,
+                } satisfies RDTTypeReference;
+            }
             return {
                 id: genRdtId(),
                 type: "SimpleProperty",
-                node: ast,
-                typeDef: ast.definition.base.value,
-                metadata: {},
+                name: ast.identifier.value,
+                metadata: {
+                    ["typeAnnotation"]: typeDef satisfies RDTTypeDef,
+                },
             } satisfies RDTSimpleProperty;
+        } else if (ast.definition.type === "ContextLiteral") {
+            throw new Error(`DefinitionProperty with context type is not supported: ${JSON.stringify(ast, null, 2)}`);
         } else {
             const derivation = rdtExpressionWalker(ast.definition);
             return {
                 id: genRdtId(),
                 type: "DerivedProperty",
-                node: ast,
+                name: ast.identifier.value,
                 derivation,
                 metadata: {},
             } satisfies RDTDerivedProperty;
@@ -434,7 +450,9 @@ export function walkDFS<T = any>(rdt: RDTNode, options: WalkDFSOptions<T>): RDTN
         };
     } else if (
         defaultReturnNode.type === 'SimpleProperty'
-        || defaultReturnNode.type === "RDTSourceConstant"
+        || defaultReturnNode.type === "RDTStringLiteral"
+        || defaultReturnNode.type === "RDTNumericLiteral"
+        || defaultReturnNode.type === "RDTIdentifier"
         || defaultReturnNode.type === "RDTSourceContext"
         || defaultReturnNode.type === "RDTSourceRuntime"
         || defaultReturnNode.type === "RDTNull"
@@ -480,6 +498,11 @@ export function walkDFS<T = any>(rdt: RDTNode, options: WalkDFSOptions<T>): RDTN
         defaultReturnNode = {
             ...defaultReturnNode,
             value: walkDFS(defaultReturnNode.value, childOpts) as RDTComputeNode,
+        };
+    } else if (defaultReturnNode.type === "RDTPostfix") {
+        defaultReturnNode = {
+            ...defaultReturnNode,
+            operand: walkDFS(defaultReturnNode.operand, childOpts) as RDTComputeNode,
         };
     } else {
         throw new Error(`Unable to walk unknown RDT node type: ${defaultReturnNode.type} node: ${JSON.stringify(defaultReturnNode, replacer, 2)}`);
@@ -542,7 +565,7 @@ function removeUnusedRDTFields(node: RDTNode): any {
 export function toRDTreeString(rdt: RDTNode) {
     const output = walkDFS(rdt, {
         onAfter: (ctx) => {
-            if (ctx.node.type === "RDTReference" || ctx.node.type === "RDTSourceConstant") {
+            if (ctx.node.type === "RDTReference" || ctx.node.type === "RDTStringLiteral" || ctx.node.type === "RDTNumericLiteral" || ctx.node.type === "RDTIdentifier") {
                 return { replacement: debugRDTNode(ctx.node) as any };
             }
             return {

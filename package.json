@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "vscodeprepare": "npm run clean && npm run gen && cp ./src/dsl.cjs ./dist && npm run tsc",
     "clean": "rm -dr out && mkdir -p out",
     "tsc": "tsc",
     "tsx": "tsx",

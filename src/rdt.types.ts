@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { DefinitionNode, DefinitionPropertyNode, IdentifierNode } from "./ast.types";
 
 let id = 0;
 export class RDTContext {
@@ -52,29 +51,40 @@ export interface RDTAssignment extends HasMetadata {
 export interface RDTDefinition extends HasMetadata {
     id: string;
     type: "RDTDefinition";
-    node: DefinitionNode;
+    name: string;
     properties: Array<RDTProperty>;
 }
 
 export interface RDTSimpleProperty extends HasMetadata {
     id: string;
     type: "SimpleProperty";
-    node: DefinitionPropertyNode;
-    typeDef: string;
+    name: string;
 }
 
 export interface RDTDerivedProperty extends HasMetadata {
     id: string;
     type: "DerivedProperty";
-    node: DefinitionPropertyNode;
+    name: string;
     derivation: RDTComputeNode | RDTRWRoot;
 }
 
 export type RDTProperty = RDTSimpleProperty | RDTDerivedProperty;
 
-export interface RDTTypeIdentifier {
-    type: "RDTTypeIdentifier";
+export interface RDTTypeReference {
+    type: "RDTTypeReference";
     name: string;
+}
+
+export interface RDTTypeString {
+    type: "string";
+}
+
+export interface RDTTypeNumber {
+    type: "number";
+}
+
+export interface RDTTypeBoolean {
+    type: "boolean";
 }
 
 export interface RDTTypeUnknown {
@@ -107,19 +117,35 @@ export interface RDTTypeBinding {
     next: RDTTypeDef;
 }
 
-export type RDTTypeDef = RDTTypeIdentifier | RDTTypeContext | RDTTypeUnknown | RDTObjectTypeDefinition | RDTTypeFunctionDefinition | RDTTypeBinding;
+
+export interface RDTTypeArrayDefinition {
+    type: "RDTTypeArrayDefinition";
+    subType: RDTTypeDef;
+}
+
+export type RDTTypeDef = RDTTypeReference | RDTTypeString | RDTTypeNumber | RDTTypeBoolean | RDTTypeContext | RDTTypeUnknown | RDTObjectTypeDefinition | RDTTypeFunctionDefinition | RDTTypeBinding | RDTTypeArrayDefinition;
 
 export interface RDTSourceContext extends HasMetadata {
     id: string;
     type: "RDTSourceContext";
-    name?: string;
-    typeDef: RDTTypeContext;
+    name: string;
 }
 
-export interface RDTSourceConstant extends HasMetadata {
+export interface RDTNumericLiteral extends HasMetadata {
     id: string;
-    type: "RDTSourceConstant";
-    typeDef: RDTTypeDef;
+    type: "RDTNumericLiteral";
+    value: string;
+}
+
+export interface RDTStringLiteral extends HasMetadata {
+    id: string;
+    type: "RDTStringLiteral";
+    value: string;
+}
+
+export interface RDTIdentifier extends HasMetadata {
+    id: string;
+    type: "RDTIdentifier";
     value: string;
 }
 
@@ -138,6 +164,13 @@ export interface RDTMath extends HasMetadata {
     rhs: RDTComputeNode;
 }
 
+export interface RDTPostfix extends HasMetadata {
+    id: string;
+    type: "RDTPostfix";
+    operator: "[]";
+    operand: RDTComputeNode;
+}
+
 export interface RDTFunction extends HasMetadata {
     id: string;
     type: "RDTFunction";
@@ -150,7 +183,6 @@ export interface RDTSourceRuntime extends HasMetadata {
     id: string;
     type: "RDTSourceRuntime";
     name: string;
-    typeDef: RDTTypeDef;
 }
 
 export interface RDTInvoke extends HasMetadata {
@@ -188,7 +220,6 @@ export interface RDTConditional extends HasMetadata {
 export interface RDTBinding extends HasMetadata {
     id: string;
     type: "RDTBinding";
-    typeDef: RDTTypeDef;
     name: string;
     value: RDTComputeNode;
     next: RDTComputeNode;
@@ -197,7 +228,6 @@ export interface RDTBinding extends HasMetadata {
 export interface RDTSideEffect extends HasMetadata {
     id: string;
     type: "RDTSideEffect";
-    typeDef: RDTTypeDef;
     expr: RDTComputeNode;
     next: RDTComputeNode;
 }
@@ -205,9 +235,9 @@ export interface RDTSideEffect extends HasMetadata {
 export type RDTComputeNode =
     | RDTOrderedExpressions
     | RDTSourceContext
-    | RDTSourceConstant
     | RDTPropertyAccess
     | RDTMath
+    | RDTPostfix
     | RDTFunction
     | RDTSourceRuntime
     | RDTInvoke
@@ -216,7 +246,10 @@ export type RDTComputeNode =
     | RDTBinding
     | RDTSideEffect
     | RDTReference
-    | RDTReturn;
+    | RDTReturn
+    | RDTStringLiteral
+    | RDTNumericLiteral
+    | RDTIdentifier;
 
 export interface RDTRoot extends HasMetadata {
     id: string;

@@ -1,1 +1,2 @@
-example = a.b.c + 3
+example = a + b + c
+example2 = 1 + 2 + "abc123"

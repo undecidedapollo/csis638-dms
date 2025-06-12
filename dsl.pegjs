@@ -64,22 +64,14 @@ Param
       return { type: "Param", identifier: name, definition: type };
     }
 
-TypeExpr
-  = base:Identifier arr:Array? {
-      return { type: "TypeExpr", base, array: !!arr };
-    }
-
-Array
-  = "[]"
-
 Identifier
-  = str:$([a-zA-Z_][a-zA-Z0-9_]*) { return {type: "identifier", value: str}; }
+  = str:$([a-zA-Z_][a-zA-Z0-9_]*) { return {type: "Identifier", value: str}; }
 
 Numeric
-  = val:$([0-9]+([.][0-9])?) {return {type: "number", value: val};}
+  = val:$([0-9]+([.][0-9])?) {return {type: "NumericLiteral", value: val};}
 
 Context
-  = [$] ident:Identifier? { return {type: "context", value: ident};}
+  = [$] ident:Identifier? { return {type: "ContextLiteral", value: ident};}
 
 Expr
   = ReturnExpr
@@ -159,27 +151,39 @@ InvokeExpr
   / DotExpression
 
 DotExpression
-  = head:PrimaryExpr tail:(_? "." _? @Identifier)* {
+  = head:PostfixOperator tail:(_? "." _? @Identifier)* {
       return tail.reduce((left, right) => {
         return { type: "operator", operator: ".", lhs: left, rhs: right };
       }, head);
     }
-    / PrimaryExpr
+    / PostfixOperator
+
+PostfixOperator
+  = operand:PrimaryExpr operators:(_? @("[]"))* {
+      // If there are no '!' operators, just return the operand itself, i.e. passthrough
+      if (operators.length === 0) {
+        return operand;
+      }
+
+      // Otherwise, build a nested AST from left to right.
+      return operators.reduce((current_operand, operator) => {
+        return { type: "PostfixOperator", operator, operand: current_operand };
+      }, operand);
+    }
 
 PrimaryExpr
-  = TypeExpr
-  / Numeric
+  = Numeric
   / StringLiteral
   / Identifier
   / Context
-  / "(" _ val:ObjectLiteralExpr _ ")" { return {type: "Parenthesis", val}; }
+  / "(" _ val:Expr _ ")" { return {type: "Parenthesis", val}; }
 
 _ = [ \t\n\r]*
 _spaces = [ \t]*
 
 StringLiteral
-  = '"' chars:DoubleStringCharacters '"' { return {type: "string", value: chars.join("")}; }
-  / "'" chars:SingleStringCharacters "'" { return {type: "string", value: chars.join("")}; }
+  = '"' chars:DoubleStringCharacters '"' { return {type: "StringLiteral", value: chars.join("")}; }
+  / "'" chars:SingleStringCharacters "'" { return {type: "StringLiteral", value: chars.join("")}; }
 
 DoubleStringCharacters
   = DoubleStringCharacter*

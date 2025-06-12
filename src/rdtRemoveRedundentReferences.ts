@@ -1,5 +1,5 @@
-import {  walkDFS } from "./rdt";
-import { RDTContext, RDTNode, RDTReference } from "./rdt.types";
+import {  walkDFS } from "./rdt.js";
+import { RDTNode, RDTReference } from "./rdt.types.js";
 
 export function removeRedundentReferences(source: RDTNode) {
     const referenceMapping = new Map<string, RDTReference>();
