@@ -122,7 +122,23 @@ ElseExpr
 
 LambdaExpr
   = "(" params:ParamList? ")" _ "=>" _ body:Expr { return {type: "LambdaExpr", params, body}; }
-  / EqualityExpr
+  / LogicalOrExpr
+
+LogicalOrExpr
+  = head:LogicalAndExpr tail:(_? "||" _? LogicalAndExpr)* {
+      return tail.reduce((left, right) => {
+        // 'right' is an array from the tail match: [whitespace, operator, whitespace, expression]
+        return { type: "operator", operator: right[1], lhs: left, rhs: right[3] };
+      }, head);
+    }
+
+LogicalAndExpr
+  = head:EqualityExpr tail:(_? "&&" _? EqualityExpr)* {
+      return tail.reduce((left, right) => {
+        // 'right' is an array from the tail match: [whitespace, operator, whitespace, expression]
+        return { type: "operator", operator: right[1], lhs: left, rhs: right[3] };
+      }, head);
+    }
 
 EqualityExpr
   = head:AdditiveExpr tail:(_? ("=="/"<"/">") _? AdditiveExpr)* {

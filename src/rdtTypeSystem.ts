@@ -111,7 +111,7 @@ export function resolveTypes(root: RDTRoot, ctxPerNode: Map<string, RDTContext>)
                 } else if (ctx.node.type === "RDTMath") {
                     if (rdtIsNotKnown(ctx.node.lhs) || rdtIsNotKnown(ctx.node.rhs)) return;
                     if (!rdtIsSameType(ctx.node.lhs, ctx.node.rhs)) throw new Error(`RDTMath lhs and rhs types do not match: ${JSON.stringify(ctx.node, replacer, 2)}`);
-                    if (["==", "<", ">"].includes(ctx.node.operator)) {
+                    if (["==", "<", ">", "&&", "||"].includes(ctx.node.operator)) {
                         setTypeMetadata(ctx.node, { type: "boolean" });
                     } else if (["+", "-", "*", "/"].includes(ctx.node.operator)) {
                         setTypeMetadata(ctx.node, { type: "number" });
@@ -174,6 +174,17 @@ export function resolveTypes(root: RDTRoot, ctxPerNode: Map<string, RDTContext>)
                         setTypeMetadata(ctx.node, propDef);
                     } else if (typeDefinitionOfSource.type === "RDTTypeArrayDefinition") {
                         if (ctx.node.propertyName.value === "filter") {
+                            setTypeMetadata(ctx.node, {
+                                type: "RDTTypeFunctionDefinition",
+                                params: {
+                                    predicate: { type: "RDTTypeFunctionDefinition", params: { value: typeDefinitionOfSource.subType }, returns: { type: "boolean" } },
+                                },
+                                returns: typeDefinitionOfSource,
+                            });
+
+                            return;
+                        }
+                        if (ctx.node.propertyName.value === "include") {
                             setTypeMetadata(ctx.node, {
                                 type: "RDTTypeFunctionDefinition",
                                 params: {

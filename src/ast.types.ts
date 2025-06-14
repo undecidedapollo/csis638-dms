@@ -103,7 +103,7 @@ export interface LambdaExprNode {
 
 export interface OperatorExprNode {
     type: "operator",
-    operator:  "==" | "+" | "-" | "*" | "/";
+    operator:  "==" | "+" | "-" | "*" | "/" | "&&" | "||";
     lhs: ExprNode;
     rhs: ExprNode;
 }

@@ -3,6 +3,7 @@ BankAccount {
     balance: $row.transactions.reduce((acc: number, tx: Transaction) => acc + tx.amount, 0),
     transactions: Transaction[].filter((tx: Transaction) => tx.bankAccountId == $row.accountId)
 }
+
 Transaction {
     id: string,
     bankAccountId: string,

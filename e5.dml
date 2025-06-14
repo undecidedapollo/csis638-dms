@@ -1,2 +1,24 @@
-example = a + b + c
-example2 = 1 + 2 + "abc123"
+Show {
+    showId: string,
+    title: string,
+    seasons: Seasons[].filter((s: Seasons) => s.showId == $row.showId),
+    episodes: Episode[].filter((e: Episode) => e.showId == $row.showId)
+}
+
+Seasons {
+    showId: string,
+    seasonId: string,
+    sortId: number,
+    displayTitle: string,
+    episodes: Episode[].filter((e: Episode) => e.seasonId == $row.seasonId)
+}
+Episode {
+    showId: string,
+    seasonId: string,
+    episodeId: string,
+
+    sortId: number,
+    displayTitle: string,
+
+    season: Seasons[].filter((s: Seasons) => s.seasonId == $row.seasonId && s.showId == $row.showId)
+}

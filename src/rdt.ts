@@ -15,7 +15,7 @@ export function genSystemIdentifier() {
 
 export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
     if (ast.type === "operator") {
-        if (["=="].includes(ast.operator) || "+-*/<>".includes(ast.operator)) {
+        if (["==", "&&", "||"].includes(ast.operator) || "+-*/<>".includes(ast.operator)) {
             const lhs = rdtExpressionWalker(ast.lhs);
             const rhs = rdtExpressionWalker(ast.rhs);
             return {
@@ -37,8 +37,7 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
                 propertyName,
                 metadata: {},
             };
-        }
-        else {
+        } else {
             throw new Error(`RDT Operator not supported: ${ast.operator}`);
         }
     } else if (ast.type === "NumericLiteral") {
