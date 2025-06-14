@@ -1,10 +1,10 @@
 Start
   = (_? def:Statement _? { return def; })+
 
-
 Statement 
   = DefinitionStatement
   / AssignmentStatement
+  / ExpressionStatement
 
 AssignmentStatement
   = name:Identifier _? "=" _? value:Expr {
@@ -14,6 +14,11 @@ AssignmentStatement
 DefinitionStatement
   = name:Identifier _? "{" _ props:DefinitionBodyList? _ "}" {
       return { type: "Definition", name, properties: props || [] };
+    }
+
+ExpressionStatement
+  = expr:Expr {
+      return { type: "Expression", expr };
     }
 
 DefinitionBodyList
@@ -69,6 +74,10 @@ Identifier
 
 Numeric
   = val:$([0-9]+([.][0-9])?) {return {type: "NumericLiteral", value: val};}
+
+Boolean
+  = "true" { return {type: "BooleanLiteral", value: true}; }
+  / "false" { return {type: "BooleanLiteral", value: false}; }
 
 Context
   = [$] ident:Identifier? { return {type: "ContextLiteral", value: ident};}
@@ -190,6 +199,7 @@ PostfixOperator
 PrimaryExpr
   = Numeric
   / StringLiteral
+  / Boolean
   / Identifier
   / Context
   / "(" _ val:Expr _ ")" { return {type: "Parenthesis", val}; }

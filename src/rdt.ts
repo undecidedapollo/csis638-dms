@@ -1,7 +1,7 @@
 
 import { randomUUID } from "node:crypto";
-import { AST, ASTNode, ReturnExprNode } from "./ast.types.js";
-import { RDTAssignment, RDTBinding, RDTComputeNode, RDTConditional, RDTDefinition, RDTDerivedProperty, RDTFunction, RDTMath, RDTNode, RDTNull, RDTPostfix, RDTProperty, RDTReference, RDTReturn, RDTRoot, RDTSideEffect, RDTSimpleProperty, RDTSourceRuntime, RDTStringLiteral, RDTTypeBoolean, RDTTypeContext, RDTTypeDef, RDTTypeNumber, RDTTypeReference, RDTTypeString } from "./rdt.types.js";
+import { AST, ASTNode, ExpressionNode, ExprNode, ReturnExprNode } from "./ast.types.js";
+import { RDTAssignment, RDTBinding, RDTComputeNode, RDTConditional, RDTDefinition, RDTDerivedProperty, RDTFunction, RDTMath, RDTNode, RDTNull, RDTOrderedExpressions, RDTPostfix, RDTProperty, RDTReference, RDTReturn, RDTRoot, RDTSideEffect, RDTSimpleProperty, RDTSourceRuntime, RDTStringLiteral, RDTTypeBoolean, RDTTypeContext, RDTTypeDef, RDTTypeNumber, RDTTypeReference, RDTTypeString } from "./rdt.types.js";
 import { debugRDTNode, replacer } from "./rdt.util.js";
 
 export function genRdtId() {
@@ -51,6 +51,13 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
         return {
             id: genRdtId(),
             type: "RDTStringLiteral",
+            value: ast.value,
+            metadata: {},
+        };
+    } else if (ast.type === "BooleanLiteral") {
+        return {
+            id: genRdtId(),
+            type: "RDTBooleanLiteral",
             value: ast.value,
             metadata: {},
         };
@@ -351,36 +358,47 @@ export function astWalker(ast: ASTNode): RDTNode {
 export function convertToRDT(ast: AST): RDTRoot {
     const definitions: RDTDefinition[] = [];
     const assignments: RDTAssignment[] = [];
+    const expressions: ExprNode[] = [];
     for (const node of ast) {
-        const res = astWalker(node);
-        if (!res) continue;
-        if (res.type === "RDTDefinition") {
-            definitions.push(res);
-        } else if (res.type === "RDTAssignment") {
-            assignments.push(res);
+        if (node.type === "Definition") {
+            const res = astWalker(node);
+            definitions.push(res as RDTDefinition);
+        } else if (node.type === "Assignment") {
+            const res = astWalker(node);
+            assignments.push(res as RDTAssignment);
+        } else if (node.type === "Expression") {
+            expressions.push(node.expr);
         } else {
-            throw new Error(`Expected RDTDefinition or RDTAssignment, got: ${res.type} at node: ${JSON.stringify(res, null, 2)}`);
+            node satisfies never;
+            throw new Error(`Unsupported AST node type: ${(node as any).type} at node: ${JSON.stringify(node, null, 2)}`);
         }
     }
+
+    const processedExpressions = rdtExpressionWalker({
+        type: "OrderedExpressionsBlock",
+        exprs: expressions,
+    });
+
     return {
         id: genRdtId(),
         type: "RDTRoot",
         definitions,
         assignments,
+        expressions: processedExpressions,
         metadata: {},
     };
 }
 
-export type WalkDFSOnNodeReturn<T> = void | { replacement?: RDTNode, state?: T };
+export type WalkDFSOnNodeReturn<TReplacement, T> = void | { replacement?: RDTNode | TReplacement, state?: T };
 
-export interface WalkDFSOptions<T> {
-    onBefore?: (ctx: { node: RDTNode, lineage: RDTNode[], state: T }) => WalkDFSOnNodeReturn<T>;
-    onAfter?: (ctx: { node: RDTNode, lineage: RDTNode[], state: T }) => WalkDFSOnNodeReturn<never>;
+export interface WalkDFSOptions<TReplacement, T> {
+    onBefore?: (ctx: { node: RDTNode, lineage: RDTNode[], state: T }) => WalkDFSOnNodeReturn<never, T>;
+    onAfter?: (ctx: { node: RDTNode | TReplacement, lineage: RDTNode[], state: T }) => WalkDFSOnNodeReturn<TReplacement, never>;
     currentLineage?: RDTNode[],
     state?: T;
 }
 
-export function walkDFS<T = any>(rdt: RDTNode, options: WalkDFSOptions<T>): RDTNode {
+export function walkDFS<TReplacement = never, T = any>(rdt: RDTNode, options: WalkDFSOptions<TReplacement, T>): RDTNode | TReplacement {
     let defaultReturnNode: RDTNode = rdt;
     let state: unknown = options.state;
     if (options.onBefore) {
@@ -418,6 +436,7 @@ export function walkDFS<T = any>(rdt: RDTNode, options: WalkDFSOptions<T>): RDTN
             ...defaultReturnNode,
             definitions: defaultReturnNode.definitions.map((def) => walkDFS(def, childOpts)) as RDTDefinition[],
             assignments: defaultReturnNode.assignments.map((assign) => walkDFS(assign, childOpts)) as RDTAssignment[],
+            expressions: walkDFS(defaultReturnNode.expressions, childOpts) as RDTComputeNode,
         };
     } else if (defaultReturnNode.type === "RDTDefinition") {
         defaultReturnNode = {
@@ -456,6 +475,7 @@ export function walkDFS<T = any>(rdt: RDTNode, options: WalkDFSOptions<T>): RDTN
         || defaultReturnNode.type === "RDTSourceRuntime"
         || defaultReturnNode.type === "RDTNull"
         || defaultReturnNode.type === "RDTReference"
+        || defaultReturnNode.type === "RDTBooleanLiteral"
     ) {
 
     } else if (defaultReturnNode.type === "RDTAssignment") {
@@ -514,7 +534,7 @@ export function walkDFS<T = any>(rdt: RDTNode, options: WalkDFSOptions<T>): RDTN
             state: state as any,
         });
         if (afterRes && ("replacement" in afterRes)) {
-            defaultReturnNode = afterRes.replacement!;
+            defaultReturnNode = afterRes.replacement! as RDTNode;
         }
     }
     return defaultReturnNode;

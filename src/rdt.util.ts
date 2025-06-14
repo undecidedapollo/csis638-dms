@@ -20,6 +20,7 @@ export const replacer = (key, value) => {
 export function debugRDTType(type?: RDTTypeDef) {
     if (!type) return "unknown";
     if (type.type === "RDTTypeUnknown") return "unknown";
+    if (type.type === "RDTTypeNone") return "none";
     if (type.type === "string") return "string";
     if (type.type === "number") return "number";
     if (type.type === "boolean") return "boolean";

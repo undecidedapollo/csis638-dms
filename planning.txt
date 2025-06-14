@@ -1,2 +1,40 @@
 Type Cycles (see Show, Season, Episode example):
 
+TestTable {
+    testField: string
+}
+
+TestTable[].filter((x: TestTable) => x.testField == "abc")
+
+SELECT * FROM "TestTable";
+
+TestTable[].map((x: TestTable) => x.testField + " modified")
+
+SELECT * FROM "TestTable" tt WHERE tt."testField" = 'abc';
+
+TestTable[].reduce((acc: string, x: TestTable) => acc + x.testField, "Start: ")
+
+SELECT 'Start: ' || string_agg("testField", '') FROM "TestTable";
+
+TestTable[].reduce((acc: string, x: TestTable) => {
+    $if (x.testField.length > 5) {
+        return acc + x.testField + " (long)"
+    } $else {
+        return acc + x.testField
+    }
+}, "Start: ")
+
+SELECT 'Start: ' || string_agg(
+    CASE 
+        WHEN length("testField") > 5 THEN "testField" || ' (long)' 
+        ELSE "testField"
+    END, '')
+FROM "TestTable";
+
+
+CREATE TABLE TestTable (
+    id SERIAL PRIMARY KEY,
+    testField VARCHAR(255) NOT NULL
+);
+
+INSERT INTO TestTable (testField) VALUES ('a'), ('abc'), ('abcde'), ('abcdef'), ('abcdefg');

@@ -87,6 +87,10 @@ export interface RDTTypeBoolean {
     type: "boolean";
 }
 
+export interface RDTTypeNone {
+    type: "RDTTypeNone";
+}
+
 export interface RDTTypeUnknown {
     type: "RDTTypeUnknown";
 }
@@ -123,12 +127,18 @@ export interface RDTTypeArrayDefinition {
     subType: RDTTypeDef;
 }
 
-export type RDTTypeDef = RDTTypeReference | RDTTypeString | RDTTypeNumber | RDTTypeBoolean | RDTTypeContext | RDTTypeUnknown | RDTObjectTypeDefinition | RDTTypeFunctionDefinition | RDTTypeBinding | RDTTypeArrayDefinition;
+export type RDTTypeDef = RDTTypeNone | RDTTypeReference | RDTTypeString | RDTTypeNumber | RDTTypeBoolean | RDTTypeContext | RDTTypeUnknown | RDTObjectTypeDefinition | RDTTypeFunctionDefinition | RDTTypeBinding | RDTTypeArrayDefinition;
 
 export interface RDTSourceContext extends HasMetadata {
     id: string;
     type: "RDTSourceContext";
     name: string;
+}
+
+export interface RDTBooleanLiteral extends HasMetadata {
+    id: string;
+    type: "RDTBooleanLiteral";
+    value: boolean;
 }
 
 export interface RDTNumericLiteral extends HasMetadata {
@@ -249,6 +259,7 @@ export type RDTComputeNode =
     | RDTReturn
     | RDTStringLiteral
     | RDTNumericLiteral
+    | RDTBooleanLiteral
     | RDTIdentifier;
 
 export interface RDTRoot extends HasMetadata {
@@ -256,6 +267,7 @@ export interface RDTRoot extends HasMetadata {
     type: "RDTRoot",
     definitions: RDTDefinition[];
     assignments: RDTAssignment[];
+    expressions: RDTComputeNode;
 }
 
 export interface RDTReference extends HasMetadata {

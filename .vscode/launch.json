@@ -9,7 +9,8 @@
       "preLaunchTask": "npm: vscodeprepare",
       "runtimeExecutable": "node",
       "runtimeArgs": ["--enable-source-maps"],
-      "args": ["dist/index.js", "e4.dml", "4"],
+      "args": ["dist/genSQL.js"],
+      // "args": ["dist/index.js", "e4.dml", "4"],
       "cwd": "${workspaceFolder}",
       "sourceMaps": true,
       "resolveSourceMapLocations": [

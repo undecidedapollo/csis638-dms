@@ -9,6 +9,7 @@ import { debugRDTNode, replacer } from './rdt.util.js';
 // import { generateDDL } from './genDDL';
 // import { generateSDK } from './genSDK';
 import { resolveTypes } from './rdtTypeSystem.js';
+import { transpile } from './transpiler.js';
 
 if (!process.argv[2]) {
     throw new Error(`Expected <filename> to be provided`);
@@ -32,25 +33,14 @@ function getIntermediateId(node: RDTDerivedProperty): string {
 }
 
 async function main() {
-    const ast: AST = parser.parse(input);
-    await fs.promises.writeFile("out/ast", JSON.stringify(ast, null, 2));
-    if (targetStage === 1) return;
-    const rdt = convertToRDT(ast);
-    await fs.promises.writeFile("out/rdt", JSON.stringify(rdt, replacer, 2));
-    await fs.promises.writeFile("out/rdttree", toRDTreeString(rdt));
-    if (targetStage === 2) return;
-
-    const {context: rdtCtx2, rdt: finalOutputTemp, ctxPerNode} = resolveRdtReferences(rdt);
-    const {rdt: finalOutput} = removeRedundentReferences(finalOutputTemp);
-    await fs.promises.writeFile("out/rdt-resolved", JSON.stringify(finalOutput, replacer, 2));
-    await fs.promises.writeFile("out/rdt-resolvedctx", JSON.stringify(rdtCtx2.tree(), null, 2));
-    await fs.promises.writeFile("out/rdt-resolvedtree", toRDTreeString(finalOutput));
-    if (targetStage === 3) return;
-
-    resolveTypes(finalOutput as RDTRoot, ctxPerNode);
-    await fs.promises.writeFile("out/rdt-typed", JSON.stringify(finalOutput, replacer, 2));
-    await fs.promises.writeFile("out/rdt-typedtree", toRDTreeString(finalOutput));
+    const finalOutput = await transpile({
+        input,
+        targetStage,
+    });
     if (targetStage === 4) return;
+    if (!finalOutput.rdt) {
+        throw new Error(`Expected final output to be an RDTRoot, got: ${typeof finalOutput}`);
+    }
 
     // TODO: Move this logic to the optimizer side of things. Everything "could" be queryside if required. This isn't true, timeSince: Time.readTime.since(Time.writeTime, "seconds")
 
@@ -61,7 +51,7 @@ async function main() {
         },
     }>();
     // Taint the nodes
-    walkDFS(finalOutput, {
+    walkDFS(finalOutput.rdt, {
         onAfter: (ctx) => {
             // This runs at the bottom every time, doesn't matter if in before or after.
             if (ctx.node.type === "RDTSourceRuntime") {
@@ -77,7 +67,7 @@ async function main() {
         }
     });
     // Split the tree
-    const rwSeparatedOutput = walkDFS(finalOutput, {
+    const rwSeparatedOutput = walkDFS(finalOutput.rdt, {
         onAfter: (ctx) => {
             // This runs at the bottom every time, doesn't matter if in before or after.
             if (ctx.node.type === "RDTSourceRuntime" || ctx.node.type === "SimpleProperty") {
@@ -124,12 +114,12 @@ async function main() {
         }
     });
     await fs.promises.writeFile("out/rdt-rwopt", JSON.stringify(rwSeparatedOutput, replacer, 2));
-    if (targetStage === 4) return;
+    if (targetStage === 5) return;
     // const file = generateSDK(rwSeparatedOutput);
     // await fs.promises.writeFile("out/gen.ts", file);
     // const sql = generateDDL(rwSeparatedOutput);
     // await fs.promises.writeFile("out/gen.sql", sql);
-    if (targetStage === 5) return;
+    if (targetStage === 6) return;
 }
 
 main().catch((e) => console.error(e));

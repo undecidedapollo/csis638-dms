@@ -1,6 +1,6 @@
 export type AST = StatementNode[];
 
-export type StatementNode = DefinitionNode | AssignmentNode;
+export type StatementNode = DefinitionNode | AssignmentNode | ExpressionNode;
 
 export interface DefinitionNode {
     type: "Definition";
@@ -12,6 +12,11 @@ export interface AssignmentNode {
     type: "Assignment";
     name: IdentifierNode;
     value: ExprNode;
+}
+
+export interface ExpressionNode {
+    type: "Expression";
+    expr: ExprNode;
 }
 
 export interface DefinitionPropertyNode {
@@ -47,6 +52,7 @@ export type ExprNode =
     | PostfixOperator
     | NumericNode
     | IdentifierNode
+    | BooleanNode
     | StringNode
     | ContextNode
     | ParenthesisNode;
@@ -123,9 +129,16 @@ export interface DotExpressionNode {
 
 export type PrimaryExprNode =
     | NumericNode
+    | StringNode
+    | BooleanNode
     | IdentifierNode
     | ContextNode
     | ParenthesisNode;
+
+export interface BooleanNode {
+    type: "BooleanLiteral";
+    value: boolean;
+}
 
 export interface NumericNode {
     type: "NumericLiteral";

@@ -1,5 +1,5 @@
 import { walkDFS } from "./rdt.js";
-import { RDTContext, RDTNode, RDTRoot, RDTTypeDef, RDTTypeUnknown } from "./rdt.types.js";
+import { RDTContext, RDTNode, RDTRoot, RDTTypeDef, RDTTypeNone, RDTTypeUnknown } from "./rdt.types.js";
 import { debugRDTType, getTypeMetadata, replacer } from "./rdt.util.js";
 
 
@@ -101,6 +101,8 @@ export function resolveTypes(root: RDTRoot, ctxPerNode: Map<string, RDTContext>)
                     setTypeMetadata(ctx.node, { type: "string"});
                 } else if (ctx.node.type === "RDTNumericLiteral") {
                     setTypeMetadata(ctx.node, { type: "number"});
+                } else if (ctx.node.type === "RDTBooleanLiteral") {
+                    setTypeMetadata(ctx.node, { type: "boolean"});
                 } else if (ctx.node.type === "RDTPostfix") {
                     if (rdtIsNotKnown(ctx.node.operand)) return;
                     setTypeMetadata(ctx.node, { type: "RDTTypeArrayDefinition", subType: getTypeMetadata(ctx.node.operand)! });
@@ -265,6 +267,8 @@ export function resolveTypes(root: RDTRoot, ctxPerNode: Map<string, RDTContext>)
                         }
                     }
                     setTypeMetadata(ctx.node, funcTypeMeta.returns);
+                } else if (ctx.node.type === "RDTNull") {
+                    setTypeMetadata(ctx.node, { type: "RDTTypeNone" } satisfies RDTTypeNone);
                 } else {
                     throw new Error(`Unknown RDT node type: ${ctx.node.type} node: ${JSON.stringify(ctx.node, replacer, 2)}`);
                 }

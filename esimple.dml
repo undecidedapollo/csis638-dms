@@ -1,0 +1,5 @@
+TestTable {
+    testField: string
+}
+
+TestTable[].filter((x: TestTable) => x.testField == "testValue")
