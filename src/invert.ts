@@ -1,71 +1,46 @@
 import { IfExprNode } from "./ast.types.js";
 import { genRdtId, toRDTExprString, toRDTreeString, walkDFS } from "./rdt.js";
-import { RDTComputeNode, RDTConditional, RDTFunction, RDTMath, RDTNode, RDTNumericLiteral, RDTReference, RDTRoot } from "./rdt.types.js";
-import { debugRDTNode, getTypeMetadata, replacer } from "./rdt.util.js";
+import { RDTComputeNode, RDTConditional, RDTDataset, RDTFunction, RDTMath, RDTNode, RDTNumericLiteral, RDTReduce, RDTReference, RDTRoot, RDTSourceRuntime, RDTTypeDef, RDTTypeFunctionDefinition } from "./rdt.types.js";
+import { debugRDTNode, debugRDTType, getTypeMetadata, replacer } from "./rdt.util.js";
 import { rdtIsNotKnown } from "./rdtTypeSystem.js";
 import { TargetStage, transpile } from "./transpiler.js";
 import { ComplexKeyMap } from "./util.js";
-import fs from "node:fs";
+import fs, { mkdirSync } from "node:fs";
 
-type RDTDataset = {
-    id: string;
-    type: "RDTDataset";
-    name: string;
-};
 type RDTReduceIntent = {
     id: string;
     type: "RDTReduceIntent";
     source: RDTDataset;
 };
 
-type RDTAdditionIntent = {
-    id: string;
-    type: "RDTReduceIntent";
-    source: RDTDataset;
-};
+type RDTReduceNode = RDTReduceIntent;
 
-type RDTReduce = {
-    id: string;
-    type: "RDTReduce";
-    insert: RDTFunction;
-    delete: RDTFunction;
-};
+// type BaseReduceResult<TGlobal> = {
+//     tGlobal?: TGlobal;
+// }
 
-type RDTReduceContext = {
-    type: "RDTReduceContext";
-    insert: RDTFunction;
-    delete: RDTFunction;
-};
+// type InvalidateReduceResult = {
+//     invalidate: true;
+// }
+// type SetReduceResult<TAcc> = {
+//     invalidate: false;
+//     acc: TAcc;
+// }
 
-type RDTReduceNode = RDTDataset | RDTReduceIntent | RDTReduce | RDTReduceContext;
+// type ExReduceResult<TAcc, TGlobal> = (SetReduceResult<TAcc> | InvalidateReduceResult) & BaseReduceResult<TGlobal>;
 
-type BaseReduceResult<TGlobal, TRow> = {
-    tGlobal?: TGlobal;
-    tRow?: TRow;
-}
+// const actionMap = ComplexKeyMap.fromEntries([
+//     [{ type: "operator", operator: "+", left: "number", rhs: "number" }, {
 
-type InvalidateReduceResult<TAcc> = {
-    invalidate: true;
-}
-type SetReduceResult<TAcc> = {
-    invalidate: false;
-    acc: TAcc;
-}
+//     }],
+//     [{ type: "operator", operator: "*", left: "number", rhs: "number" }, {
 
-type ExReduceResult<TAcc, TGlobal, TRow> = (SetReduceResult<TAcc> | InvalidateReduceResult<TAcc>) & BaseReduceResult<TGlobal, TRow>;
-
-const actionMap = ComplexKeyMap.fromEntries([
-    [{ type: "operator", operator: "+", left: "number", rhs: "number" }, {
-
-    }],
-    [{ type: "operator", operator: "*", left: "number", rhs: "number" }, {
-
-    }],
-    // Swamps: true's
-    [{ type: "operator", operator: "||", left: "boolean", rhs: "boolean" }, {
-        // Global state on the row for number of true's,
-    }],
-]);
+//     }],
+//     // Swamps: true's
+//     [{ type: "operator", operator: "||", left: "boolean", rhs: "boolean" }, {
+//         // Global state on the row for number of true's,
+//     }],
+// ]);
 
 enum OperatorSide {
     Left = 1,
@@ -79,16 +54,155 @@ const operatorInverse = {
     "/": "*",
 };
 
-function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceIntent, nodeMap: Map<string, RDTNode | RDTReduceNode> }): RDTReduce {
-    if (reduceFunction.parameters.length !== 2) throw new Error(`Expected two parameters for reduce function, got: ${reduceFunction.parameters.length}`);
-    const [accParameter, rowParameter] = reduceFunction.parameters;
-    const output1 = {
+function subForPass<T extends RDTNode>(tree: T, replacement: Record<string, { referenceId: string, name: string }>): T {
+    return walkDFS(tree, {
+        onAfter: (ctx) => {
+            if (ctx.node.type === "RDTReference" && ctx.node.referenceId in replacement) {
+                const match = replacement[ctx.node.referenceId]!;
+                return {
+                    replacement: {
+                        id: genRdtId(),
+                        type: "RDTReference",
+                        referenceId: match.referenceId,
+                        name: match.name,
+                        metadata: {}
+                    } satisfies RDTReference
+                };
+            }
+        }
+    }) as T;
+}
+
+function assembleReduceNode(params: {
+    forwardPass: RDTComputeNode,
+    inversePass: RDTComputeNode,
+    onView: RDTComputeNode,
+    source: RDTDataset,
+    accType: RDTTypeDef,
+    rowType: RDTTypeDef,
+    viewType: RDTTypeDef,
+    ids: {
+        accCurParamId: string,
+        accNextParamId: string,
+        rowOldParamId: string,
+        rowNewParamId: string,
+    }
+
+}): RDTReduce {
+    return {
         id: genRdtId(),
         type: "RDTReduce",
-    } satisfies Partial<RDTReduce>;
-    let numberOfAccsFound = 0;
+        source: params.source,
+        forward: {
+            id: genRdtId(),
+            metadata: {
+                ["typeinfo"]: {
+                    type: "RDTTypeFunctionDefinition",
+                    params: {
+                        "accCur": params.accType,
+                        "newRow": params.rowType,
+                    },
+                    returns: params.accType,
+                } satisfies RDTTypeFunctionDefinition,
+            },
+            type: "RDTFunction",
+            parameters: [
+                {
+                    id: params.ids.accCurParamId,
+                    type: "RDTSourceRuntime",
+                    name: "accCur",
+                    metadata: {
+                        ["typeinfo"]: params.accType,
+                    },
+                } satisfies RDTSourceRuntime,
+                {
+                    id: params.ids.rowNewParamId,
+                    type: "RDTSourceRuntime",
+                    name: "newRow",
+                    metadata: {
+                        ["typeinfo"]: params.rowType,
+                    },
+                } satisfies RDTSourceRuntime,
+            ],
+            body: params.forwardPass,
+            name: "fowardPass",
+        } satisfies RDTFunction,
+        inverse: {
+            id: genRdtId(),
+            metadata: {
+                ["typeinfo"]: {
+                    type: "RDTTypeFunctionDefinition",
+                    params: {
+                        "accNext": params.accType,
+                        "oldRow": params.rowType,
+                    },
+                    returns: params.accType,
+                } satisfies RDTTypeFunctionDefinition,
+            },
+            type: "RDTFunction",
+            parameters: [
+                {
+                    id: params.ids.accNextParamId,
+                    type: "RDTSourceRuntime",
+                    name: "accNext",
+                    metadata: {
+                        ["typeinfo"]: params.accType,
+                    },
+                } satisfies RDTSourceRuntime,
+                {
+                    id: params.ids.rowOldParamId,
+                    type: "RDTSourceRuntime",
+                    name: "oldRow",
+                    metadata: {
+                        ["typeinfo"]: params.rowType,
+                    },
+                } satisfies RDTSourceRuntime,
+            ],
+            body: params.inversePass,
+            name: "inversePass",
+        } satisfies RDTFunction,
+        onView: {
+            id: genRdtId(),
+            metadata: {
+                ["typeinfo"]: {
+                    type: "RDTTypeFunctionDefinition",
+                    params: {
+                        "accCur": params.accType,
+                    },
+                    returns: params.viewType,
+                } satisfies RDTTypeFunctionDefinition,
+            },
+            type: "RDTFunction",
+            parameters: [
+                {
+                    id: params.ids.accCurParamId,
+                    type: "RDTSourceRuntime",
+                    name: "accCur",
+                    metadata: {
+                        ["typeinfo"]: params.accType,
+                    },
+                } satisfies RDTSourceRuntime,
+            ],
+            body: params.onView,
+            name: "onView",
+        } satisfies RDTFunction,
+        metadata: {
+            ["accTypeInfo"]: params.accType,
+        },
+    } satisfies RDTReduce;
+}
 
-    let lineage : {node: RDTMath, accSide: OperatorSide}[];
+function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceIntent, nodeMap: Map<string, RDTNode | RDTReduceNode>, idx: number }): RDTReduce {
+    fs.mkdirSync(`./out/reduce/${ctx.idx}`, { recursive: true });
+    if (reduceFunction.parameters.length !== 2) throw new Error(`Expected two parameters for reduce function, got: ${reduceFunction.parameters.length}`);
+    const [accParameter, rowParameter] = reduceFunction.parameters;
+    const accParameterType = getTypeMetadata(accParameter, { returnRawBinding: false });
+    const rowParameterType = getTypeMetadata(accParameter, { returnRawBinding: false });
+    if (!accParameterType || accParameterType.type === "RDTTypeUnknown") throw new Error(`Accumulator type is unknown in reducer`);
+    if (!rowParameterType || rowParameterType.type === "RDTTypeUnknown") throw new Error(`Row type is uknown in reducer`);
+
+    let numberOfAccsFound = 0;
+    let lineage: { node: RDTMath, accSide: OperatorSide }[];
     let accRoot: RDTReference;
     walkDFS<RDTReduceNode>(reduceFunction.body, {
         onAfter: (ctx) => {
@@ -134,13 +248,16 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
     let accNextParamId = genRdtId();
     let rowOldParamId = genRdtId();
     let rowNewParamId = genRdtId();
-    
+
     if (rdtIsNotKnown(reduceFunction)) throw new Error(`Expected to know type of reduce function`);
-    const x = getTypeMetadata(reduceFunction, {returnRawBinding: false})!
+    const x = getTypeMetadata(reduceFunction, { returnRawBinding: false })!
     if (x.type !== "RDTTypeFunctionDefinition") throw new Error(`Unexpected reduce function type`);
     if (x.returns.type === "number") {
         lineage.reverse(); // mutating
-        const inverseRDT = lineage.reduce((acc, next): RDTComputeNode => {
+        const forwardPass = subForPass(reduceFunction.body, {
+            [accParameter.id]: { name: "accCur", referenceId: accCurParamId },
+        });
+        const inversePass = subForPass(lineage.reduce((acc, next): RDTComputeNode => {
             if (next.accSide === OperatorSide.Right) {
                 return {
                     ...next.node,
@@ -163,10 +280,42 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
             metadata: {},
             referenceId: accNextParamId,
             name: "accNext",
-        } satisfies RDTReference);
-    
-        fs.writeFileSync("./out/inverse.rdt", JSON.stringify(inverseRDT, replacer, 2));
-        throw new Error("Nothing for you!");
+        } satisfies RDTReference), {
+            [rowParameter.id]: { name: "newRow", referenceId: rowNewParamId },
+            // No need to sub acc references since this is done automatically as part of the reduce.
+        });
+
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/foward.rdt`, JSON.stringify(forwardPass, replacer, 2));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/foward-tree.rdt`, toRDTreeString(forwardPass));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/foward-expr.rdt`, toRDTExprString(forwardPass));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/inverse.rdt`, JSON.stringify(inversePass, replacer, 2));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/inverse-tree.rdt`, toRDTreeString(inversePass));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/inverse-expr.rdt`, toRDTExprString(inversePass));
+        return assembleReduceNode({
+            ids: {
+                accCurParamId,
+                accNextParamId,
+                rowNewParamId,
+                rowOldParamId,
+            },
+            source: ctx.reduceIntent.source,
+            forwardPass,
+            inversePass,
+            onView: {
+                id: genRdtId(),
+                type: "RDTReference",
+                metadata: {},
+                referenceId: accCurParamId,
+                name: "accCur",
+            },
+            accType: {
+                type: "number",
+            },
+            viewType: {
+                type: "number",
+            },
+            rowType: rowParameterType,
+        });
     }
     if (x.returns.type === "boolean") {
         const rootOperation = lineage[lineage.length - 1];
@@ -183,43 +332,21 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
             id: genRdtId(),
             type: "RDTConditional",
             metadata: {},
-            condition: walkDFS(rootOperation.node, {
-                onAfter: (ctx) => {
-                    if (ctx.node.type === "RDTReference" && ctx.node.referenceId === rowParameter.id) {
-                        return {
-                            replacement: {
-                                id: genRdtId(),
-                                type: "RDTReference",
-                                referenceId: rowNewParamId,
-                                name: "newRow",
-                                metadata: {}
-                            } satisfies RDTReference
-                        };
-                    }
-                    if (ctx.node.type === "RDTReference" && ctx.node.referenceId === accParameter.id) {
-                        return {
-                            replacement: {
-                                id: genRdtId(),
-                                type: "RDTReference",
-                                referenceId: accCurParamId,
-                                name: "accCur",
-                                metadata: {}
-                            } satisfies RDTReference
-                        };
-                    }
-                }
-            }) as RDTComputeNode,
+            condition: subForPass(rootOperation.node, {
+                [rowParameter.id]: { name: "newRow", referenceId: rowNewParamId },
+                [accParameter.id]: { name: "accCur", referenceId: accCurParamId },
+            }),
             then: {
                 id: genRdtId(),
-                type:"RDTMath",
+                type: "RDTMath",
                 metadata: {},
                 operator: "+",
                 lhs: {
                     id: genRdtId(),
                     metadata: {},
                     type: "RDTReference",
-                    referenceId: accParameter.id,
-                    name: accRoot.name,
+                    referenceId: accCurParamId,
+                    name: "accCur",
                 } satisfies RDTReference,
                 rhs: {
                     id: genRdtId(),
@@ -230,15 +357,15 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
             } satisfies RDTMath,
             else: {
                 id: genRdtId(),
-                type:"RDTMath",
+                type: "RDTMath",
                 metadata: {},
                 operator: "+",
                 lhs: {
                     id: genRdtId(),
                     metadata: {},
                     type: "RDTReference",
-                    referenceId: accParameter.id,
-                    name: accRoot.name,
+                    referenceId: accCurParamId,
+                    name: "accCur",
                 } satisfies RDTReference,
                 rhs: {
                     id: genRdtId(),
@@ -253,43 +380,21 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
             id: genRdtId(),
             type: "RDTConditional",
             metadata: {},
-            condition: walkDFS(rootOperation.node, {
-                onAfter: (ctx) => {
-                    if (ctx.node.type === "RDTReference" && ctx.node.referenceId === rowParameter.id) {
-                        return {
-                            replacement: {
-                                id: genRdtId(),
-                                type: "RDTReference",
-                                referenceId: rowOldParamId,
-                                name: "oldRow",
-                                metadata: {}
-                            } satisfies RDTReference
-                        };
-                    }
-                    if (ctx.node.type === "RDTReference" && ctx.node.referenceId === accParameter.id) {
-                        return {
-                            replacement: {
-                                id: genRdtId(),
-                                type: "RDTReference",
-                                referenceId: accNextParamId,
-                                name: "accNext",
-                                metadata: {}
-                            } satisfies RDTReference
-                        };
-                    }
-                }
-            }) as RDTComputeNode,
+            condition: subForPass(rootOperation.node, {
+                [rowParameter.id]: { name: "oldRow", referenceId: rowOldParamId },
+                [accParameter.id]: { name: "accNext", referenceId: accNextParamId },
+            }),
             then: {
                 id: genRdtId(),
-                type:"RDTMath",
+                type: "RDTMath",
                 metadata: {},
                 operator: "-",
                 lhs: {
                     id: genRdtId(),
                     metadata: {},
                     type: "RDTReference",
-                    referenceId: accParameter.id,
-                    name: accRoot.name,
+                    referenceId: accNextParamId,
+                    name: "accNext",
                 } satisfies RDTReference,
                 rhs: {
                     id: genRdtId(),
@@ -297,20 +402,20 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
                     type: "RDTNumericLiteral",
                     value: keepTrackOfTrueCount ? "1" : "0",
 
-                    
+
                 } satisfies RDTNumericLiteral
             } satisfies RDTMath,
             else: {
                 id: genRdtId(),
-                type:"RDTMath",
+                type: "RDTMath",
                 metadata: {},
                 operator: "-",
                 lhs: {
                     id: genRdtId(),
                     metadata: {},
                     type: "RDTReference",
-                    referenceId: accParameter.id,
-                    name: accRoot.name,
+                    referenceId: accNextParamId,
+                    name: "accNext",
                 } satisfies RDTReference,
                 rhs: {
                     id: genRdtId(),
@@ -320,26 +425,73 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
                 } satisfies RDTNumericLiteral
             }
         } satisfies RDTConditional;
-    
-        console.log({
-            keepTrackOfTrueCount,
-            accCurParamId,
-            accNextParamId,
-            rowOldParamId,
-            rowNewParamId,
-        });
-        fs.writeFileSync("./out/foward.rdt", JSON.stringify(forwardPass, replacer, 2));
-        fs.writeFileSync("./out/foward-tree.rdt", toRDTreeString(forwardPass));
-        fs.writeFileSync("./out/foward-expr.rdt", toRDTExprString(forwardPass));
-        fs.writeFileSync("./out/inverse.rdt", JSON.stringify(inversePass, replacer, 2));
-        fs.writeFileSync("./out/inverse-tree.rdt", toRDTreeString(inversePass));
-        fs.writeFileSync("./out/inverse-expr.rdt", toRDTExprString(inversePass));
 
-        throw new Error("A boolean for you!");
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/foward.rdt`, JSON.stringify(forwardPass, replacer, 2));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/foward-tree.rdt`, toRDTreeString(forwardPass));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/foward-expr.rdt`, toRDTExprString(forwardPass));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/inverse.rdt`, JSON.stringify(inversePass, replacer, 2));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/inverse-tree.rdt`, toRDTreeString(inversePass));
+        fs.writeFileSync(`./out/reduce/${ctx.idx}/inverse-expr.rdt`, toRDTExprString(inversePass));
+
+        const returnTypeIfAccIsZero = keepTrackOfTrueCount ? false : true;
+
+        return assembleReduceNode({
+            ids: {
+                accCurParamId,
+                accNextParamId,
+                rowNewParamId,
+                rowOldParamId,
+            },
+            source: ctx.reduceIntent.source,
+            forwardPass,
+            inversePass,
+            onView: {
+                id: genRdtId(),
+                type: "RDTConditional",
+                metadata: {},
+                condition: {
+                    id: genRdtId(),
+                    type: "RDTMath",
+                    operator: "==",
+                    metadata: {},
+                    lhs: {
+                        id: genRdtId(),
+                        type: "RDTReference",
+                        metadata: {},
+                        referenceId: accCurParamId,
+                        name: "accCur",
+                    },
+                    rhs: {
+                        id: genRdtId(),
+                        type: "RDTNumericLiteral",
+                        metadata: {},
+                        value: "0",
+                    },
+                },
+                then: {
+                    id: genRdtId(),
+                    type: "RDTBooleanLiteral",
+                    metadata: {},
+                    value: returnTypeIfAccIsZero
+                },
+                else: {
+                    id: genRdtId(),
+                    type: "RDTBooleanLiteral",
+                    metadata: {},
+                    value: !returnTypeIfAccIsZero,
+                },
+            },
+            accType: {
+                type: "number",
+            },
+            viewType: {
+                type: "boolean",
+            },
+            rowType: rowParameterType,
+        });
     }
 
-    throw new Error("Some shit happened");
-
+    throw new Error(`Unable to handle return type for single acc root reducer: ${debugRDTType(x.returns)}`);
 }
 
 function processTree(root: RDTRoot) {
@@ -352,15 +504,18 @@ function processTree(root: RDTRoot) {
         },
     });
 
-    const result = walkDFS<RDTReduceNode>(root, {
+    let reduceExpressionCount = 0;
+
+    return walkDFS<RDTReduceNode>(root, {
         onAfter: (ctx) => {
             if (ctx.node.type === "RDTPostfix" && ctx.node.operator === "[]" && ctx.node.operand.type === "RDTReference") {
                 const referencedNode = nodeMap.get(ctx.node.operand.referenceId);
                 if (!referencedNode) throw new Error(`Referenced node not found: ${ctx.node.operand.referenceId}`);
                 if (referencedNode.type !== "RDTDefinition") throw new Error(`Expected referenced node to be a definition, got: ${referencedNode.type}`);
-                console.log(`Generating SQL for node: ${ctx.node.operand.referenceId} (${referencedNode.name})`);
+
                 const node = {
                     id: genRdtId(),
+                    metadata: {},
                     type: "RDTDataset",
                     name: referencedNode.name,
                 } satisfies RDTDataset;
@@ -389,7 +544,7 @@ function processTree(root: RDTRoot) {
                 if (ctx.node.args[0].type !== "RDTFunction") throw new Error(`Expected argument to be a function, got: ${ctx.node.args[0].type}`);
                 const reduceFunction = ctx.node.args[0];
 
-                const output = walkReduce(reduceFunction, { reduceIntent, nodeMap });
+                const output = walkReduce(reduceFunction, { reduceIntent, nodeMap, idx: reduceExpressionCount++ });
                 nodeMap.set(output.id, output);
                 return {
                     replacement: output,
@@ -419,18 +574,19 @@ Transaction {
     suspicious: boolean,
     auditRequest: number
 }
-
-Transaction[].reduce((acc: boolean, row: Transaction) => acc || row.flagged || (row.auditRequest > 5 && row.suspicious), false)
+a = Transaction[].reduce((acc: number, row: Transaction) => acc + row.amount, 0)
+b = Transaction[].reduce((acc: number, row: Transaction) => 2 / (5 - acc * 10), 0)
+c = Transaction[].reduce((acc: boolean, row: Transaction) => acc || row.flagged || (row.auditRequest > 5 && row.suspicious), false)
         `,
-        // Transaction[].reduce((acc: number, row: Transaction) => acc + row.amount, 0)
-        // Transaction[].reduce((acc: number, row: Transaction) => 2 / (5 - acc * 10), 0)
-        // (5 - (2 / y)) / 10
         targetStage: TargetStage.RDT_TYPED,
     });
     if (!output.rdt || !(output.rdt.type === "RDTRoot")) {
         throw new Error(`Expected output to be an RDTRoot, got: ${typeof output.rdt}`);
     }
-    processTree(output.rdt);
+    const updatedTree = processTree(output.rdt);
+    fs.writeFileSync(`./out/reduce/final.rdt`, JSON.stringify(updatedTree, replacer, 2));
+    fs.writeFileSync(`./out/reduce/final-tree.rdt`, toRDTreeString(updatedTree as any));
+    fs.writeFileSync(`./out/reduce/final-expr.rdt`, toRDTExprString(updatedTree as any));
 }
 
 if (process.argv[1] === import.meta.filename) {

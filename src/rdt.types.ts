@@ -295,4 +295,23 @@ export type RDTNode =
     | RDTRoot
     | RDTReference
     | RDTRWRoot
-    | RDTAssignment;
+    | RDTAssignment
+    | RDTDataset
+    | RDTReduce;
+
+export type RDTDataset = {
+        id: string;
+        metadata: {};
+        type: "RDTDataset";
+        name: string;
+    };
+
+export type RDTReduce = {
+    id: string;
+    metadata: {};
+    type: "RDTReduce";
+    source: RDTDataset;
+    forward: RDTFunction;
+    inverse: RDTFunction;
+    onView: RDTFunction;
+};

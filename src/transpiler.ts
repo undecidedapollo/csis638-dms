@@ -2,7 +2,7 @@ import { AST, ASTNode } from "./ast.types.js";
 import { RDTNode, RDTRoot } from "./rdt.types.js";
 import fs from "node:fs";
 import parser from './dsl.cjs';
-import { convertToRDT, toRDTreeString } from "./rdt.js";
+import { convertToRDT, toRDTExprString, toRDTreeString } from "./rdt.js";
 import { removeRedundentReferences } from "./rdtRemoveRedundentReferences.js";
 import { resolveRdtReferences } from "./rdtReferenceResolver.js";
 import { replacer } from "./rdt.util.js";
@@ -32,6 +32,7 @@ export const transpile = async function transpile(options: TranspilerOptions):Pr
     const rdt = convertToRDT(ast);
     await fs.promises.writeFile(`${outDir}/rdt`, JSON.stringify(rdt, replacer, 2));
     await fs.promises.writeFile(`${outDir}/rdttree`, toRDTreeString(rdt));
+    await fs.promises.writeFile(`${outDir}/rdtexpr`, toRDTExprString(rdt));
     if (targetStage === 2) return {ast, rdt};
 
     const {context: rdtCtx2, rdt: finalOutputTemp, ctxPerNode} = resolveRdtReferences(rdt);
@@ -39,11 +40,13 @@ export const transpile = async function transpile(options: TranspilerOptions):Pr
     await fs.promises.writeFile(`${outDir}/rdt-resolved`, JSON.stringify(finalOutput, replacer, 2));
     await fs.promises.writeFile(`${outDir}/rdt-resolvedctx`, JSON.stringify(rdtCtx2.tree(), null, 2));
     await fs.promises.writeFile(`${outDir}/rdt-resolvedtree`, toRDTreeString(finalOutput));
+    await fs.promises.writeFile(`${outDir}/rdt-resolvedexpr`, toRDTExprString(finalOutput));
     if (targetStage === 3) return {ast, rdt: finalOutput};
 
     resolveTypes(finalOutput as RDTRoot, ctxPerNode);
     await fs.promises.writeFile(`${outDir}/rdt-typed`, JSON.stringify(finalOutput, replacer, 2));
     await fs.promises.writeFile(`${outDir}/rdt-typedtree`, toRDTreeString(finalOutput));
+    await fs.promises.writeFile(`${outDir}/rdt-typedexpr`, toRDTExprString(finalOutput));
     if (targetStage === 4) return {ast, rdt: finalOutput};
     return {ast, rdt: finalOutput};
 };

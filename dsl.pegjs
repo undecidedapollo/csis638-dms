@@ -204,8 +204,14 @@ PrimaryExpr
   / Context
   / "(" _ val:Expr _ ")" { return {type: "Parenthesis", val}; }
 
-_ = [ \t\n\r]*
-_spaces = [ \t]*
+_
+  = ([ \t\n\r] / Comment)*
+
+_spaces
+  = ([ \t] / Comment)*
+
+Comment
+  = "//" [^\n\r]*
 
 StringLiteral
   = '"' chars:DoubleStringCharacters '"' { return {type: "StringLiteral", value: chars.join("")}; }

@@ -55,7 +55,6 @@ export function resolveRdtReferences(source: RDTNode) {
                     return;
                 }
 
-                console.log(`Finding thing ${debugRDTNode(ctx.node)}`);
                 const matchingRdtCtx = ctxPerNode.get(ctx.node.id);
                 if (!matchingRdtCtx) {
                     throw new Error(`Unable to find context for node: ${JSON.stringify(ctx.node, replacer, 2)}`);
