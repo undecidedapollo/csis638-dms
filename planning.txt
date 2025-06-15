@@ -1,4 +1,6 @@
+Don't propogate RDTPostfix on a RDTIdentifier[]. There should be new types here, like RDTDataset perhaps?
 Type Cycles (see Show, Season, Episode example):
+
 
 TestTable {
     testField: string

@@ -1,6 +1,6 @@
 import { walkDFS } from "./rdt.js";
 import { RDTContext, RDTNode, RDTRoot, RDTTypeDef, RDTTypeNone, RDTTypeUnknown } from "./rdt.types.js";
-import { debugRDTType, getTypeMetadata, replacer } from "./rdt.util.js";
+import { debugRDTNode, debugRDTType, getTypeMetadata, replacer } from "./rdt.util.js";
 
 
 function rdtIsType(node: RDTNode, type: RDTTypeDef["type"]): boolean {
@@ -198,13 +198,22 @@ export function resolveTypes(root: RDTRoot, ctxPerNode: Map<string, RDTContext>)
                             return;
                         }
                         if (ctx.node.propertyName.value === "reduce") {
+                            const [parent] = ctx.lineage;
+                            if(parent.type !== "RDTInvoke" || parent.source.id !== ctx.node.id) throw new Error(`Expected reduce to be invoked after being referenced. No higher order functions here. Found: ${debugRDTNode(parent)}`);
+                            if (rdtIsNotKnown(parent.args[0])) return; // Function type is not known
+                            const child = resolveReferenceType(getTypeMetadata(parent.args[0], {returnRawBinding: false})!);
+                            if (!child) throw new Error(`Child type is unknown for reduce rdt invoke`);
+                            if (child.type === "RDTTypeUnknown") return; // Not known yet
+                            if (child.type !== "RDTTypeFunctionDefinition") throw new Error(`Expected to find a function definition as the arg for reduce, found: ${debugRDTType(child)}`);
+                            const returnType = child.returns;
+                            if (returnType.type === "RDTTypeUnknown") return; // Not known yet
                             setTypeMetadata(ctx.node, {
                                 type: "RDTTypeFunctionDefinition",
                                 params: {
-                                    predicate: { type: "RDTTypeFunctionDefinition", params: {acc: { type: "number" }, value: typeDefinitionOfSource.subType }, returns: { type: "number" } },
-                                    initialValue: { type: "number" },
+                                    predicate: { type: "RDTTypeFunctionDefinition", params: {acc: returnType, value: typeDefinitionOfSource.subType }, returns: returnType },
+                                    initialValue: returnType,
                                 },
-                                returns: { type: "number" },
+                                returns: returnType,
                             });
 
                             return;

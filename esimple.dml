@@ -10,3 +10,13 @@ TestTable[].reduce((acc: string, x: TestTable) => {
 
     $return acc + x.testField
 }, "Start: ")
+
+
+TestTable[].reduce((acc: string, x: TestTable) => {
+    $let length = x.testField.length + 1;
+    $if (length > 5) {
+        $return acc + x.testField + " (long)"
+    }
+
+    $return acc + x.testField
+}, "Start: ")

@@ -138,7 +138,7 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
         if (hasReturn !== -1 && hasReturn !== ast.exprs.length - 1) {
             throw new Error(`Return expression must be the last expression in an ordered expressions block, found at index ${hasReturn} in: ${JSON.stringify(ast, replacer, 2)}`);
         }
-    
+
         let astExprs = ast.exprs;
         let finalExpr: RDTNode;
         if (hasReturn !== -1) {
@@ -146,13 +146,13 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
         } else {
             finalExpr = rdtNull();
         }
-    
+
         const exprs = astExprs.slice(0, hasReturn !== -1 ? hasReturn : astExprs.length).map((expr) => rdtExpressionWalker(expr)).reverse();
-    
+
         if (exprs.length === 0) {
             return finalExpr;
         }
-    
+
         return exprs.reduce((acc: RDTComputeNode, curr) => {
             if (curr.type === "RDTBinding") {
                 if (curr.next.type !== "RDTNull") {
@@ -260,6 +260,9 @@ export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
             operand: rdtExpressionWalker(ast.operand),
             metadata: {},
         } satisfies RDTPostfix;
+    } else if (ast.type === "Parenthesis") {
+        // TODO: I believe parenthesis are handled more in the AST by the parser and get put in the correct place automatically. If so, we can remove the type and do this reduction as part of the parser vs. here.
+        return rdtExpressionWalker(ast.val);
     } else {
         throw new Error(`Unable to rdt walk for ast type: ${ast.type} node: ${JSON.stringify(ast, null, 2)}`);
     }
@@ -595,4 +598,58 @@ export function toRDTreeString(rdt: RDTNode) {
         }
     }) as RDTNode;
     return prettyPrint(output);
+}
+
+function getRDTNodeAsPseudoString(node: RDTNode): string {
+    if (node.type === "RDTStringLiteral") {
+        return `"${node.value}"`;
+    } else if (node.type === "RDTNumericLiteral" || node.type === "RDTBooleanLiteral") {
+        return `${node.value}`;
+    } else if (node.type === "RDTIdentifier") {
+        return `${node.value}`
+    } else if (node.type === "RDTReference") {
+        return node.name ? node.name : `ref(${node.referenceId})`;
+    } else if (node.type === "RDTMath") {
+        return `${node.lhs} ${node.operator} ${node.rhs}`;
+    } else if (node.type === "RDTPropertyAccess") {
+        return `${node.source}.${node.propertyName}`;
+    } else if (node.type === "RDTConditional") {
+        return `if (${node.condition}) {
+            ${node.then}
+        } else {
+            ${node.else}
+        }`
+    } else if (node.type === "RDTNull") {
+        return `/* NOOP */`;
+    } else if (node.type === "RDTFunction") {
+        const args = node.parameters.join(", ");
+        return `(${args}) => {\n${node.body}\n}`;
+    } else if (node.type === "RDTSourceRuntime") {
+        return node.name;
+    } else if (node.type === "RDTAssignment") {
+        return `let ${node.name} = ${node.value}\n`;
+    } else if (node.type === "RDTBinding") {
+        return `let ${node.name} = ${node.value}\n${node.next}`;
+    } else if (node.type === "RDTSideEffect") {
+        return `${node.expr}\n${node.next}`;
+    } else if (node.type === "RDTPostfix") {
+        return `${node.operand}${node.operator}`;
+    } else if (node.type === "RDTInvoke") {
+        const params = node.args.join(", ");
+        return `${node.source}(${params})`;
+    } else if (node.type === "RDTReturn") {
+        return `return ${node.value}`;
+    } else {
+        throw new Error(`Unknown RDT type for expr generator. type: ${node.type} node: ${JSON.stringify(node, replacer, 2)}`);
+    }
+}
+
+export function toRDTExprString(rdt: RDTNode) {
+    return walkDFS(rdt, {
+        onAfter: (ctx) => {
+            return {
+                replacement: getRDTNodeAsPseudoString(ctx.node as RDTNode) as any,
+            };
+        }
+    }) as string;
 }
