@@ -150,7 +150,7 @@ LogicalAndExpr
     }
 
 EqualityExpr
-  = head:AdditiveExpr tail:(_? ("=="/"<"/">") _? AdditiveExpr)* {
+  = head:AdditiveExpr tail:(_? ("=="/"!="/"<"/">") _? AdditiveExpr)* {
       return tail.reduce((left, right) => {
         // 'right' is an array from the tail match: [whitespace, operator, whitespace, expression]
         return { type: "operator", operator: right[1], lhs: left, rhs: right[3] };

@@ -255,6 +255,7 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
     if (x.returns.type === "number") {
         lineage.reverse(); // mutating
         const forwardPass = subForPass(reduceFunction.body, {
+            [rowParameter.id]: { name: "newRow", referenceId: rowNewParamId },
             [accParameter.id]: { name: "accCur", referenceId: accCurParamId },
         });
         const inversePass = subForPass(lineage.reduce((acc, next): RDTComputeNode => {
@@ -281,7 +282,7 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
             referenceId: accNextParamId,
             name: "accNext",
         } satisfies RDTReference), {
-            [rowParameter.id]: { name: "newRow", referenceId: rowNewParamId },
+            [rowParameter.id]: { name: "oldRow", referenceId: rowOldParamId },
             // No need to sub acc references since this is done automatically as part of the reduce.
         });
 
@@ -332,11 +333,27 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
             id: genRdtId(),
             type: "RDTConditional",
             metadata: {},
-            condition: subForPass(rootOperation.node, {
+            condition: walkDFS(subForPass(rootOperation.node, {
                 [rowParameter.id]: { name: "newRow", referenceId: rowNewParamId },
                 [accParameter.id]: { name: "accCur", referenceId: accCurParamId },
-            }),
-            then: {
+            }), {
+                onAfter: (ctx) => {
+                    // TODO: Not sure if we should always do this. Let's try to refute at some point
+                    if (ctx.node.type === "RDTMath") {
+                        if (ctx.node.lhs.type === "RDTReference" && ctx.node.lhs.referenceId === accCurParamId) {
+                            return {
+                                replacement: ctx.node.rhs,
+                            };
+                        }
+                        if (ctx.node.rhs.type === "RDTReference" && ctx.node.rhs.referenceId === accCurParamId) {
+                            return {
+                                replacement: ctx.node.lhs,
+                            };
+                        }
+                    }
+                },
+            }) as RDTComputeNode,
+            then: keepTrackOfTrueCount ? {
                 id: genRdtId(),
                 type: "RDTMath",
                 metadata: {},
@@ -352,10 +369,16 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
                     id: genRdtId(),
                     metadata: {},
                     type: "RDTNumericLiteral",
-                    value: keepTrackOfTrueCount ? "1" : "0"
+                    value: "1"
                 } satisfies RDTNumericLiteral
-            } satisfies RDTMath,
-            else: {
+            } satisfies RDTMath : {
+                id: genRdtId(),
+                metadata: {},
+                type: "RDTReference",
+                referenceId: accCurParamId,
+                name: "accCur",
+            } satisfies RDTReference,
+            else: !keepTrackOfTrueCount ? {
                 id: genRdtId(),
                 type: "RDTMath",
                 metadata: {},
@@ -371,20 +394,41 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
                     id: genRdtId(),
                     metadata: {},
                     type: "RDTNumericLiteral",
-                    value: keepTrackOfTrueCount ? "0" : "1"
+                    value: "1"
                 } satisfies RDTNumericLiteral
-            }
+            } : {
+                id: genRdtId(),
+                metadata: {},
+                type: "RDTReference",
+                referenceId: accCurParamId,
+                name: "accCur",
+            } satisfies RDTReference
         } satisfies RDTConditional;
 
         const inversePass = {
             id: genRdtId(),
             type: "RDTConditional",
             metadata: {},
-            condition: subForPass(rootOperation.node, {
+            condition: walkDFS(subForPass(rootOperation.node, {
                 [rowParameter.id]: { name: "oldRow", referenceId: rowOldParamId },
                 [accParameter.id]: { name: "accNext", referenceId: accNextParamId },
-            }),
-            then: {
+            }), {
+                onAfter: (ctx) => {
+                    if (ctx.node.type === "RDTMath") {
+                        if (ctx.node.lhs.type === "RDTReference" && ctx.node.lhs.referenceId === accNextParamId) {
+                            return {
+                                replacement: ctx.node.rhs,
+                            };
+                        }
+                        if (ctx.node.rhs.type === "RDTReference" && ctx.node.rhs.referenceId === accNextParamId) {
+                            return {
+                                replacement: ctx.node.lhs,
+                            };
+                        }
+                    }
+                },
+            }) as RDTComputeNode,
+            then: keepTrackOfTrueCount ? {
                 id: genRdtId(),
                 type: "RDTMath",
                 metadata: {},
@@ -400,12 +444,16 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
                     id: genRdtId(),
                     metadata: {},
                     type: "RDTNumericLiteral",
-                    value: keepTrackOfTrueCount ? "1" : "0",
-
-
+                    value: "1",
                 } satisfies RDTNumericLiteral
-            } satisfies RDTMath,
-            else: {
+            } satisfies RDTMath : {
+                id: genRdtId(),
+                metadata: {},
+                type: "RDTReference",
+                referenceId: accNextParamId,
+                name: "accNext",
+            } satisfies RDTReference,
+            else: !keepTrackOfTrueCount ? {
                 id: genRdtId(),
                 type: "RDTMath",
                 metadata: {},
@@ -421,9 +469,15 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
                     id: genRdtId(),
                     metadata: {},
                     type: "RDTNumericLiteral",
-                    value: keepTrackOfTrueCount ? "0" : "1",
+                    value: "1",
                 } satisfies RDTNumericLiteral
-            }
+            }: {
+                id: genRdtId(),
+                metadata: {},
+                type: "RDTReference",
+                referenceId: accNextParamId,
+                name: "accNext",
+            } satisfies RDTReference
         } satisfies RDTConditional;
 
         fs.writeFileSync(`./out/reduce/${ctx.idx}/foward.rdt`, JSON.stringify(forwardPass, replacer, 2));

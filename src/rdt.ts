@@ -15,7 +15,7 @@ export function genSystemIdentifier() {
 
 export function rdtExpressionWalker(ast: ASTNode): RDTComputeNode {
     if (ast.type === "operator") {
-        if (["==", "&&", "||"].includes(ast.operator) || "+-*/<>".includes(ast.operator)) {
+        if (["==", "!=", "&&", "||"].includes(ast.operator) || "+-*/<>".includes(ast.operator)) {
             const lhs = rdtExpressionWalker(ast.lhs);
             const rhs = rdtExpressionWalker(ast.rhs);
             return {
@@ -619,7 +619,7 @@ function getRDTNodeAsPseudoString(node: RDTNode): string {
     } else if (node.type === "RDTReference") {
         return node.name ? node.name : `ref(${node.referenceId})`;
     } else if (node.type === "RDTMath") {
-        return `${node.lhs} ${node.operator} ${node.rhs}`;
+        return `(${node.lhs} ${node.operator} ${node.rhs})`;
     } else if (node.type === "RDTPropertyAccess") {
         return `${node.source}.${node.propertyName}`;
     } else if (node.type === "RDTConditional") {

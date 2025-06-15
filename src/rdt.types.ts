@@ -169,7 +169,7 @@ export interface RDTPropertyAccess extends HasMetadata {
 export interface RDTMath extends HasMetadata {
     id: string;
     type: "RDTMath";
-    operator: "*" | "/" | "+" | "-" | "==" | "&&" | "||";
+    operator: "*" | "/" | "+" | "-" | "==" | "!=" | "&&" | "||";
     lhs: RDTComputeNode;
     rhs: RDTComputeNode;
 }
