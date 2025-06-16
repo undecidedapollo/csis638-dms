@@ -165,36 +165,37 @@ AdditiveExpr
     }
 
 MultiplicativeExpr
-  = head:InvokeExpr tail:(_? [*/] _? InvokeExpr)* {
+  = head:MemberExpr tail:(_? [*/] _? MemberExpr)* {
       return tail.reduce((left, right) => {
         return { type: "operator", operator: right[1], lhs: left, rhs: right[3] };
       }, head);
     }
 
-InvokeExpr
-  = lhs:DotExpression _? "(" args: ArgList? ")" { return {type: "InvokeExpr", lhs, args: args ?? []}; }
-  / DotExpression
-
-DotExpression
-  = head:PostfixOperator tail:(_? "." _? @Identifier)* {
-      return tail.reduce((left, right) => {
-        return { type: "operator", operator: ".", lhs: left, rhs: right };
+MemberExpr
+  = head:PrimaryExpr tail:(_? @MemberSuffix)* {
+      return tail.reduce((left, suffix) => {
+        if (suffix.type === 'Invoke') {
+          return { type: 'InvokeExpr', lhs: left, args: suffix.args };
+        }
+        if (suffix.type === 'Property') {
+          return { type: 'operator', operator: '.', lhs: left, rhs: suffix.property };
+        }
+        if (suffix.type === 'Property') {
+          return { type: 'operator', operator: '.', lhs: left, rhs: suffix.property };
+        }
+        if (suffix.type === 'PostfixOperator') {
+          return { type: 'PostfixOperator', operator: suffix.operator, operand: left };
+        }
+        
+        throw new Error(`Unknown suffix type: ${JSON.stringify(suffix)}`);
       }, head);
     }
-    / PostfixOperator
 
-PostfixOperator
-  = operand:PrimaryExpr operators:(_? @("[]"))* {
-      // If there are no '!' operators, just return the operand itself, i.e. passthrough
-      if (operators.length === 0) {
-        return operand;
-      }
-
-      // Otherwise, build a nested AST from left to right.
-      return operators.reduce((current_operand, operator) => {
-        return { type: "PostfixOperator", operator, operand: current_operand };
-      }, operand);
-    }
+MemberSuffix
+  = "." _? prop:Identifier { return { type: 'Property', property: prop }; }
+  / "(" _? args:ArgList? _? ")" { return { type: 'Invoke', args: args || [] }; }
+  / "[]" { return { type: 'PostfixOperator', operator: "[]" }; }
+  
 
 PrimaryExpr
   = Numeric

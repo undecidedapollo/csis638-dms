@@ -169,7 +169,7 @@ export interface RDTPropertyAccess extends HasMetadata {
 export interface RDTMath extends HasMetadata {
     id: string;
     type: "RDTMath";
-    operator: "*" | "/" | "+" | "-" | "==" | "!=" | "&&" | "||";
+    operator: "*" | "/" | "+" | "-" | "==" | "!=" | "&&" | "||" | ">" | "<";
     lhs: RDTComputeNode;
     rhs: RDTComputeNode;
 }
@@ -260,7 +260,8 @@ export type RDTComputeNode =
     | RDTStringLiteral
     | RDTNumericLiteral
     | RDTBooleanLiteral
-    | RDTIdentifier;
+    | RDTIdentifier
+    | RDTDatasetPipeline;
 
 export interface RDTRoot extends HasMetadata {
     id: string;
@@ -286,8 +287,6 @@ export interface RDTRWRoot extends HasMetadata {
     read: RDTNode,
 }
 
-
-
 export type RDTNode =
     | RDTComputeNode
     | RDTProperty
@@ -296,22 +295,36 @@ export type RDTNode =
     | RDTReference
     | RDTRWRoot
     | RDTAssignment
-    | RDTDataset
-    | RDTReduce;
+    | RDTDatasetOperators
+    | RDTDatasetPipeline;
 
-export type RDTDataset = {
-        id: string;
-        metadata: {};
-        type: "RDTDataset";
-        name: string;
-    };
-
-export type RDTReduce = {
+export interface RDTFilter extends HasMetadata {
     id: string;
-    metadata: {};
+    type: "RDTFilter";
+    condition: RDTFunction;
+}
+
+export interface RDTReduce extends HasMetadata {
+    id: string;
     type: "RDTReduce";
-    source: RDTDataset;
     forward: RDTFunction;
     inverse: RDTFunction;
     onView: RDTFunction;
 };
+
+export interface RDT extends HasMetadata {
+    id: string;
+    type: "RDTReduce";
+    forward: RDTFunction;
+    inverse: RDTFunction;
+    onView: RDTFunction;
+};
+
+export type RDTDatasetOperators = RDTFilter | RDTReduce;
+
+export interface RDTDatasetPipeline extends HasMetadata {
+    id: string;
+    type: "RDTDatasetPipeline";
+    source: RDTReference;
+    pipeline: Array<RDTDatasetOperators>;
+}

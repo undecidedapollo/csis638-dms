@@ -1,0 +1,17 @@
+Transaction {
+    id: number,
+    accountId: number,
+    amount: number,
+    flagged: boolean,
+    suspicious: boolean,
+    auditRequest: number
+}
+
+BankAccount {
+    id: number,
+    balance: Transaction[].filter((tx: Transaction) => tx.accountId == $row.id).reduce((acc: number, row: Transaction) => acc + row.amount, 0),
+    crazyNumber: Transaction[].reduce((acc: number, row: Transaction) => 2 / (5 - acc * 10), 0)
+}
+// a = Transaction[].reduce((acc: number, row: Transaction) => acc + row.amount, 0)
+// b = Transaction[].reduce((acc: number, row: Transaction) => 2 / (5 - acc * 10), 0)
+ //flagged: Transaction[].reduce((acc: boolean, row: Transaction) => acc || row.flagged || (row.auditRequest > 2 && row.suspicious) || (row.auditRequest > 5), false)

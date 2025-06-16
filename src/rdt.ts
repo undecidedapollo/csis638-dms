@@ -1,7 +1,7 @@
 
 import { randomUUID } from "node:crypto";
 import { AST, ASTNode, ExpressionNode, ExprNode, ReturnExprNode } from "./ast.types.js";
-import { RDTAssignment, RDTBinding, RDTComputeNode, RDTConditional, RDTDataset, RDTDefinition, RDTDerivedProperty, RDTFunction, RDTMath, RDTNode, RDTNull, RDTOrderedExpressions, RDTPostfix, RDTProperty, RDTReduce, RDTReference, RDTReturn, RDTRoot, RDTSideEffect, RDTSimpleProperty, RDTSourceRuntime, RDTStringLiteral, RDTTypeBoolean, RDTTypeContext, RDTTypeDef, RDTTypeNumber, RDTTypeReference, RDTTypeString } from "./rdt.types.js";
+import { RDTAssignment, RDTBinding, RDTComputeNode, RDTConditional, RDTDefinition, RDTDerivedProperty, RDTFunction, RDTMath, RDTNode, RDTNull, RDTOrderedExpressions, RDTPostfix, RDTProperty, RDTReduce, RDTReference, RDTReturn, RDTRoot, RDTSideEffect, RDTSimpleProperty, RDTSourceRuntime, RDTStringLiteral, RDTTypeBoolean, RDTTypeContext, RDTTypeDef, RDTTypeNumber, RDTTypeReference, RDTTypeString } from "./rdt.types.js";
 import { debugRDTNode, debugRDTType, getTypeMetadata, replacer } from "./rdt.util.js";
 
 export function genRdtId() {
@@ -479,7 +479,6 @@ export function walkDFS<TReplacement = never, T = any>(rdt: RDTNode, options: Wa
         || defaultReturnNode.type === "RDTNull"
         || defaultReturnNode.type === "RDTReference"
         || defaultReturnNode.type === "RDTBooleanLiteral"
-        || defaultReturnNode.type === "RDTDataset"
     ) {
 
     } else if (defaultReturnNode.type === "RDTAssignment") {
@@ -530,10 +529,20 @@ export function walkDFS<TReplacement = never, T = any>(rdt: RDTNode, options: Wa
     } else if (defaultReturnNode.type === "RDTReduce") {
         defaultReturnNode = {
             ...defaultReturnNode,
-            source: walkDFS(defaultReturnNode.source, childOpts) as RDTDataset,
             forward: walkDFS(defaultReturnNode.forward, childOpts) as RDTFunction,
             inverse: walkDFS(defaultReturnNode.inverse, childOpts) as RDTFunction,
             onView: walkDFS(defaultReturnNode.onView, childOpts) as RDTFunction,
+        } as RDTNode;
+    } else if (defaultReturnNode.type === "RDTDatasetPipeline") {
+        defaultReturnNode = {
+            ...defaultReturnNode,
+            source: walkDFS(defaultReturnNode.source, childOpts),
+            pipeline: defaultReturnNode.pipeline.map((step) => walkDFS(step, childOpts)),
+        } as RDTNode;
+    } else if (defaultReturnNode.type === "RDTFilter") {
+        defaultReturnNode = {
+            ...defaultReturnNode,
+            condition: walkDFS(defaultReturnNode.condition, childOpts),
         } as RDTNode;
     } else {
         throw new Error(`Unable to walk unknown RDT node type: ${defaultReturnNode.type} node: ${JSON.stringify(defaultReturnNode, replacer, 2)}`);
@@ -660,10 +669,15 @@ function getRDTNodeAsPseudoString(node: RDTNode): string {
         const assigns = node.assignments.join("\n\n");
         const expressions = node.expressions;
         return `${defines}\n\n${assigns}\n\n${expressions}`;
-    }  else if (node.type === "RDTReduce") {
-        return `{\nsource: ${node.source}\ntype: "REDUCER",\nforward: ${node.forward},\ninverse: ${node.inverse},\nonView: ${node.onView}\n}`;
-    } else if (node.type === "RDTDataset") {
-        return `$dataset(${node.name})`;
+    } else if (node.type === "RDTReduce") {
+        return `$reduce({\nforward: ${node.forward},\ninverse: ${node.inverse},\nonView: ${node.onView}\n})`;
+    } else if (node.type === "RDTFilter") {
+        return `$filter(${node.condition})`;
+    } else if (node.type === "RDTDatasetPipeline") {
+        const steps = node.pipeline.join("\n|>");
+        return `${node.source}\n|> ${steps}`;
+    } else if (node.type === "RDTSourceContext") {
+        return node.name;
     } else {
         throw new Error(`Unknown RDT type for expr generator. type: ${node.type} node: ${JSON.stringify(node, replacer, 2)}`);
     }

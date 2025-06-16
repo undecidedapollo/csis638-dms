@@ -37,7 +37,7 @@ async function main() {
         input,
         targetStage,
     });
-    if (targetStage <= 4) return;
+    if (targetStage <= 5) return;
     if (!finalOutput.rdt) {
         throw new Error(`Expected final output to be an RDTRoot, got: ${typeof finalOutput}`);
     }

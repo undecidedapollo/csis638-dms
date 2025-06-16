@@ -1,5 +1,5 @@
 import { walkDFS } from "./rdt.js";
-import { RDTComputeNode, RDTContext, RDTNode, RDTRoot } from "./rdt.types.js";
+import { RDTComputeNode, RDTNode, RDTRoot } from "./rdt.types.js";
 import { debugRDTNode } from "./rdt.util.js";
 import { TargetStage, transpile } from "./transpiler.js";
 import fs from "node:fs";

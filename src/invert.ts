@@ -1,6 +1,6 @@
 import { IfExprNode } from "./ast.types.js";
 import { genRdtId, toRDTExprString, toRDTreeString, walkDFS } from "./rdt.js";
-import { RDTComputeNode, RDTConditional, RDTDataset, RDTFunction, RDTMath, RDTNode, RDTNumericLiteral, RDTReduce, RDTReference, RDTRoot, RDTSourceRuntime, RDTTypeDef, RDTTypeFunctionDefinition } from "./rdt.types.js";
+import { RDTComputeNode, RDTConditional, RDTFunction, RDTMath, RDTNode, RDTNumericLiteral, RDTReduce, RDTReference, RDTRoot, RDTSourceRuntime, RDTTypeDef, RDTTypeFunctionDefinition } from "./rdt.types.js";
 import { debugRDTNode, debugRDTType, getTypeMetadata, replacer } from "./rdt.util.js";
 import { rdtIsNotKnown } from "./rdtTypeSystem.js";
 import { TargetStage, transpile } from "./transpiler.js";
@@ -10,7 +10,6 @@ import fs, { mkdirSync } from "node:fs";
 type RDTReduceIntent = {
     id: string;
     type: "RDTReduceIntent";
-    source: RDTDataset;
 };
 
 type RDTReduceNode = RDTReduceIntent;
@@ -77,7 +76,6 @@ function assembleReduceNode(params: {
     forwardPass: RDTComputeNode,
     inversePass: RDTComputeNode,
     onView: RDTComputeNode,
-    source: RDTDataset,
     accType: RDTTypeDef,
     rowType: RDTTypeDef,
     viewType: RDTTypeDef,
@@ -92,7 +90,6 @@ function assembleReduceNode(params: {
     return {
         id: genRdtId(),
         type: "RDTReduce",
-        source: params.source,
         forward: {
             id: genRdtId(),
             metadata: {
@@ -192,7 +189,7 @@ function assembleReduceNode(params: {
     } satisfies RDTReduce;
 }
 
-function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceIntent, nodeMap: Map<string, RDTNode | RDTReduceNode>, idx: number }): RDTReduce {
+export function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceIntent, idx: number }): RDTReduce {
     fs.mkdirSync(`./out/reduce/${ctx.idx}`, { recursive: true });
     if (reduceFunction.parameters.length !== 2) throw new Error(`Expected two parameters for reduce function, got: ${reduceFunction.parameters.length}`);
     const [accParameter, rowParameter] = reduceFunction.parameters;
@@ -299,7 +296,6 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
                 rowNewParamId,
                 rowOldParamId,
             },
-            source: ctx.reduceIntent.source,
             forwardPass,
             inversePass,
             onView: {
@@ -496,7 +492,6 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
                 rowNewParamId,
                 rowOldParamId,
             },
-            source: ctx.reduceIntent.source,
             forwardPass,
             inversePass,
             onView: {
@@ -546,106 +541,4 @@ function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDTReduceI
     }
 
     throw new Error(`Unable to handle return type for single acc root reducer: ${debugRDTType(x.returns)}`);
-}
-
-function processTree(root: RDTRoot) {
-    const nodeMap = new Map<string, RDTNode | RDTReduceNode>();
-
-    walkDFS(root, {
-        onBefore: (ctx) => {
-            if (nodeMap.has(ctx.node.id)) return;
-            nodeMap.set(ctx.node.id, ctx.node);
-        },
-    });
-
-    let reduceExpressionCount = 0;
-
-    return walkDFS<RDTReduceNode>(root, {
-        onAfter: (ctx) => {
-            if (ctx.node.type === "RDTPostfix" && ctx.node.operator === "[]" && ctx.node.operand.type === "RDTReference") {
-                const referencedNode = nodeMap.get(ctx.node.operand.referenceId);
-                if (!referencedNode) throw new Error(`Referenced node not found: ${ctx.node.operand.referenceId}`);
-                if (referencedNode.type !== "RDTDefinition") throw new Error(`Expected referenced node to be a definition, got: ${referencedNode.type}`);
-
-                const node = {
-                    id: genRdtId(),
-                    metadata: {},
-                    type: "RDTDataset",
-                    name: referencedNode.name,
-                } satisfies RDTDataset;
-                nodeMap.set(node.id, node);
-                return {
-                    replacement: node,
-                };
-            }
-            if (ctx.node.type === "RDTPropertyAccess" && (ctx.node.source as unknown as RDTDataset).type === "RDTDataset") {
-                if (ctx.node.propertyName.type === "RDTIdentifier" && ctx.node.propertyName.value === "reduce") {
-                    const node = {
-                        id: genRdtId(),
-                        type: "RDTReduceIntent",
-                        source: ctx.node.source as unknown as RDTDataset,
-                    } satisfies RDTReduceIntent;
-                    nodeMap.set(node.id, node);
-                    return {
-                        replacement: node,
-                    };
-                }
-                throw new Error(`Unexpected property access: ${debugRDTNode(ctx.node.propertyName)} on ${ctx.node.source.type}`);
-            }
-            if (ctx.node.type === "RDTInvoke" && (ctx.node.source as unknown as RDTReduceNode).type === "RDTReduceIntent") {
-                const reduceIntent = ctx.node.source as unknown as RDTReduceIntent;
-                if (ctx.node.args.length !== 2) throw new Error(`Expected two arguments for reduce, got: ${ctx.node.args.length}`);
-                if (ctx.node.args[0].type !== "RDTFunction") throw new Error(`Expected argument to be a function, got: ${ctx.node.args[0].type}`);
-                const reduceFunction = ctx.node.args[0];
-
-                const output = walkReduce(reduceFunction, { reduceIntent, nodeMap, idx: reduceExpressionCount++ });
-                nodeMap.set(output.id, output);
-                return {
-                    replacement: output,
-                };
-            }
-            if (ctx.node.type === "RDTSideEffect") {
-                if ((ctx.node.expr as unknown as RDTReduce).type === "RDTReduce") {
-                    if (ctx.node.next.type !== "RDTNull") throw new Error(`Multi-stage side effects are not supported, got: ${ctx.node.next.type}, expected RDTNull`);
-                    return {
-                        replacement: ctx.node.expr,
-                    };
-                } else {
-                    throw new Error(`Expected side effect expression to be RDTReduce, got: ${ctx.node.expr.type}`);
-                }
-            }
-        },
-    });
-}
-
-async function main() {
-    const output = await transpile({
-        outDir: "invert",
-        input: `
-Transaction {
-    amount: number,
-    flagged: boolean,
-    suspicious: boolean,
-    auditRequest: number
-}
-a = Transaction[].reduce((acc: number, row: Transaction) => acc + row.amount, 0)
-b = Transaction[].reduce((acc: number, row: Transaction) => 2 / (5 - acc * 10), 0)
-c = Transaction[].reduce((acc: boolean, row: Transaction) => acc || row.flagged || (row.auditRequest > 5 && row.suspicious), false)
-        `,
-        targetStage: TargetStage.RDT_TYPED,
-    });
-    if (!output.rdt || !(output.rdt.type === "RDTRoot")) {
-        throw new Error(`Expected output to be an RDTRoot, got: ${typeof output.rdt}`);
-    }
-    const updatedTree = processTree(output.rdt);
-    fs.writeFileSync(`./out/reduce/final.rdt`, JSON.stringify(updatedTree, replacer, 2));
-    fs.writeFileSync(`./out/reduce/final-tree.rdt`, toRDTreeString(updatedTree as any));
-    fs.writeFileSync(`./out/reduce/final-expr.rdt`, toRDTExprString(updatedTree as any));
-}
-
-if (process.argv[1] === import.meta.filename) {
-    main().catch((err) => {
-        console.error(err);
-        process.exit(1);
-    });
 }
