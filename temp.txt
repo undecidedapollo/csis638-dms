@@ -1,20 +1,22 @@
+truncate "BankAccount";
+truncate "Transaction";
+
 insert into "BankAccount" ("accountId", "balance") values ('b1', 0);
+insert into "BankAccount" ("accountId", "balance") values ('b2', 0);
+
 
 insert into "Transaction" ("id", "bankAccountId", "amount") values ('t1', 'b1', 1);
 insert into "Transaction" ("id", "bankAccountId", "amount") values ('t2', 'b1', 2);
 insert into "Transaction" ("id", "bankAccountId", "amount") values ('t3', 'b1', 3);
+insert into "Transaction" ("id", "bankAccountId", "amount") values ('t4', 'b2', 7);
+
 
 select * from "BankAccount";
-select * from "Transaction";
 
-SELECT
-    t.*,
-    "Transaction_BankAccount_balance_reducers_forward"(5.0::double precision, t) AS new_balance
-FROM
-    "Transaction" AS t;
+delete from "Transaction" where "id" = 't2';
 
+select * from "BankAccount";
 
-insert into "BankAccount" ("id", "balance", "crazyNumber", "flagged") values (1, 0, 0, false);
-insert into "Transaction" ("id", "accountId", "amount", "flagged", "suspicious", "auditRequest") values (1, 1, 3, false, false, 3);
-insert into "Transaction" ("id", "accountId", "amount", "flagged", "suspicious", "auditRequest") values (2, 1, 3, false, false, 1);
-insert into "Transaction" ("id", "accountId", "amount", "flagged", "suspicious", "auditRequest") values (3, 1, 3, false, true, 3);
+update "Transaction" set "bankAccountId" = 'b2' where "id" = 't1';
+
+select * from "BankAccount";
