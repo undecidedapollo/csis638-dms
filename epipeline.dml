@@ -2,6 +2,7 @@ Transaction {
     id: number,
     accountId: number,
     amount: number,
+    modifier: number,
     flagged: boolean,
     suspicious: boolean,
     auditRequest: number
@@ -9,9 +10,20 @@ Transaction {
 
 BankAccount {
     id: number,
-    balance: Transaction[].filter((tx: Transaction) => tx.accountId == $row.id).reduce((acc: number, row: Transaction) => acc + row.amount, 0),
-    crazyNumber: Transaction[].reduce((acc: number, row: Transaction) => 2 / (5 - acc * 10), 0)
+    balance: Transaction[]
+        .filter((tx: Transaction) => tx.accountId == $row.id)
+        .reduce((acc: number, row: Transaction) => acc + row.amount, 0),
+
+    exampleAlgebra: Transaction[]
+        .filter((tx: Transaction) => tx.accountId == $row.id)
+        .reduce((acc: number, row: Transaction) => (2 / (5 - acc * 10)) + row.modifier, 0),
+
+    flagged: Transaction[]
+        .filter((tx: Transaction) => tx.accountId == $row.id)
+        .reduce((acc: boolean, row: Transaction) => { 
+            $return acc 
+                || row.flagged 
+                || (row.auditRequest > 2 && row.suspicious) 
+                || (row.auditRequest > 5)
+        }, false)
 }
-// a = Transaction[].reduce((acc: number, row: Transaction) => acc + row.amount, 0)
-// b = Transaction[].reduce((acc: number, row: Transaction) => 2 / (5 - acc * 10), 0)
- //flagged: Transaction[].reduce((acc: boolean, row: Transaction) => acc || row.flagged || (row.auditRequest > 2 && row.suspicious) || (row.auditRequest > 5), false)

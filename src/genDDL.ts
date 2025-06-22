@@ -166,6 +166,7 @@ function generateReduceFunctions(reduce: RDTReduce, reducePrefix: string, rowTab
         sql,
         forwardFuncName,
         inverseFuncName,
+        accType: reduceType,
     };
 }
 
@@ -249,7 +250,7 @@ function generateDerivedPipeline(pipeline: RDTDatasetPipeline, ctx: {targetTable
         FOR EACH ROW EXECUTE FUNCTION "${functionName}"();
     `;
 
-    return {preSql, sql};
+    return {preSql, sql, accType: reduceFunctionSQL.accType};
 }
 
 function generateDefinition(rdt: RDTDefinition): {table: string; postSql: string[]; preSql: string[]} {
@@ -275,6 +276,7 @@ function generateDefinition(rdt: RDTDefinition): {table: string; postSql: string
                 targetTable: rdt.name,
                 targetProp: prop.name,
             });
+            sharedProperties[prop.name] = res.accType;
             preSql.push(res.preSql);
             postSql.push(res.sql);
             // ?? This case can happen if all the work required for a derived property is on the write side ??
