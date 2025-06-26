@@ -1,1 +1,0 @@
-Generate a view for a table when the datatypes required for reducing don't match the expected datatype.

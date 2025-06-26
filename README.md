@@ -14,7 +14,7 @@ npm install
 ### How to run:
 
 ```sh
-npm run gen && clear && npm run clean && npm run start src/index2.ts e4.dml 6
+npm run gen && clear && npm run clean && npm run start src/index.ts e4.dml 6
 ```
 
 ### How to test output:
