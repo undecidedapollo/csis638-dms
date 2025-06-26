@@ -1,0 +1,25 @@
+// This has quite a few problems, while filter / reduce does express a good bit of the logic it isn't the "correct" way to do so.
+Item {
+    itemId: number,
+    numAvailable: ItemInventory[]
+        .filter((ii: ItemInventory) => ii.itemId == $row.itemId && ii.isPurchased == false)
+        .reduce((acc: number, ii: ItemInventory) => acc + 1, 0)
+}
+
+ItemInventory {
+    itemId: number,
+    instanceId: number,
+    isPurchased: OrderItem[]
+        .filter((oi: OrderItem) => oi.instanceId == $row.instanceId)
+        .reduce((acc: boolean, oi: OrderItem) => acc || true, false)
+}
+
+Order {
+    orderId: number
+}
+
+OrderItem {
+    orderId: number,
+    itemId: number,
+    instanceId: number
+}

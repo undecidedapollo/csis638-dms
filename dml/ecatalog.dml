@@ -1,0 +1,16 @@
+Show {
+    showId: number,
+    numSeasons: Seasons[].filter((s: Seasons) => s.showId == $row.showId).reduce((acc: number, row: Season) => acc + 1, 0),
+    numEpisodes: Episode[].filter((e: Episode) => e.showId == $row.showId).reduce((acc: number, row: Episode) => acc + 1, 0)
+}
+
+Seasons {
+    showId: number,
+    seasonId: number,
+    numEpisodes: Episode[].filter((e: Episode) => e.showId == $row.showId && e.seasonId == $row.seasonId).reduce((acc: number, row: Episode) => acc + 1, 0)
+}
+Episode {
+    showId: number,
+    seasonId: number,
+    episodeId: number
+}

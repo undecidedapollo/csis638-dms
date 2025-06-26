@@ -38,6 +38,8 @@ function processFilterPipeline(filter: RDTFilter, ctxRowIdentifier: string): (ro
         if (filterFunc.parameters.length !== 1) throw new Error(`Invalid func definition, param lenght`);
         const triggerRowId = filterFunc.parameters[0].id;
         return walkDFS<RDTNode>(filterFunc.body, {
+            // There is a problem if the column you are checking is a derived column and the derived column's type is different than the actual type.
+            // Will need to call the onView function in this case when accessing derived columns
             onAfter: (ctx) => {
                 if (ctx.node.type === "RDTReference") {
                     if (ctx.node.referenceId === triggerRowId) {
@@ -66,6 +68,10 @@ function processFilterPipeline(filter: RDTFilter, ctxRowIdentifier: string): (ro
                 } else if (ctx.node.type === "RDTIdentifier") {
                     return {
                         replacement: `"${ctx.node.value}"` as any
+                    }
+                } else if (ctx.node.type === "RDTBooleanLiteral") {
+                    return {
+                        replacement: `${ctx.node.value}` as any
                     }
                 } else {
                     throw new Error(`Unknown filter condition type: ${JSON.stringify(ctx.node, replacer, 2)}`);
@@ -118,6 +124,10 @@ function funcToSql(funcDefinition: RDTFunction, ctx: {funcName: string, paramTyp
                         END case
                     ` as any
                 };
+            } else if (ctx.node.type === "RDTBooleanLiteral") {
+                return {
+                    replacement: `${ctx.node.value}` as any
+                }
             } else {
                 throw new Error(`Unknown reduce condition type: ${JSON.stringify(ctx.node, replacer, 2)}`);
             }

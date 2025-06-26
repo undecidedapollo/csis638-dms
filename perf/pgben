@@ -1,0 +1,20 @@
+export PGUSER=postgres
+export PGPASSWORD=mysecretpassword
+export PGHOST=localhost
+createdb pgbencher
+
+
+docker rm -f some-postgres
+docker run \
+    --name some-postgres \
+    -e POSTGRES_PASSWORD=mysecretpassword \
+    -d --rm \
+    -p 5432:5432 \
+    --cpus="2.0" \
+    --cpu-shares=2048 \
+    --memory="4g" \
+    --memory-reservation="4g" \
+    postgres:17.5
+
+psql -f perf/catalog/norm_setup.sql
+pgbench -n -c 1 -j 8 -t 100 -f perf/catalog/norm_homepage.sql

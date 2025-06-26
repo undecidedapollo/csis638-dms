@@ -1,0 +1,22 @@
+User {
+    userId: number,
+    isWhale: Purchase[]
+        .filter((p: Purchase) => p.userId == $row.userId)
+        .reduce((acc: boolean, p: Purchase) => acc || (p.returned == false && p.amount > 975), false),
+    numberOfPurchases: Purchase[]
+        .filter((p: Purchase) => p.userId == $row.userId && p.returned == false)
+        .reduce((acc: number, p: Purchase) => acc + 1, 0),
+    numberOfReturns: Purchase[]
+        .filter((p: Purchase) => p.userId == $row.userId && p.returned == true)
+        .reduce((acc: number, p: Purchase) => acc + 1, 0),
+    lifetimeValue: Purchase[]
+        .filter((p: Purchase) => p.userId == $row.userId && p.returned == false)
+        .reduce((acc: number, p: Purchase) => acc + p.amount, 0)
+}
+
+Purchase {
+    purchaseId: number,
+    userId: number,
+    amount: number,
+    returned: boolean
+}
