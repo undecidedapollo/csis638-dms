@@ -35,7 +35,7 @@ const operatorMap : Record<RDTMath["operator"], string> = {
 function processFilterPipeline(filter: RDTFilter, ctxRowIdentifier: string): (rowIdentifier: string) => string {
     return (rowIdentifier: string) => {
         const filterFunc = filter.condition;
-        if (filterFunc.parameters.length !== 1) throw new Error(`Invalid func definition, param lenght`);
+        if (filterFunc.parameters.length !== 1) throw new Error(`Invalid func definition, parameter length`);
         const triggerRowId = filterFunc.parameters[0].id;
         return walkDFS<RDTNode>(filterFunc.body, {
             // There is a problem if the column you are checking is a derived column and the derived column's type is different than the actual type.
