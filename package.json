@@ -4,8 +4,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "vscodeprepare": "npm run clean && npm run gen && cp ./src/dsl.cjs ./dist && npm run tsc",
-    "clean": "rm -dr out && mkdir -p out",
+    "vscodeprepare": "npm run clean:out && npm run gen && cp ./src/dsl.cjs ./dist && npm run tsc",
+    "clean:out": "rm -dr out && mkdir -p out",
+    "clean:pegjs": "rm -f src/dsl.cjs src/dsl.d.ts",
+    "clean:tsc": "rm -rf dist",
+    "clean": "npm run clean:out && npm run clean:pegjs && npm run clean:tsc",
     "tsc": "tsc",
     "tsx": "tsx",
     "start": "tsc --noEmit && tsx",
