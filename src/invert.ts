@@ -194,7 +194,7 @@ export function walkReduce(reduceFunction: RDTFunction, ctx: { reduceIntent: RDT
     if (reduceFunction.parameters.length !== 2) throw new Error(`Expected two parameters for reduce function, got: ${reduceFunction.parameters.length}`);
     const [accParameter, rowParameter] = reduceFunction.parameters;
     const accParameterType = getTypeMetadata(accParameter, { returnRawBinding: false });
-    const rowParameterType = getTypeMetadata(accParameter, { returnRawBinding: false });
+    const rowParameterType = getTypeMetadata(rowParameter, { returnRawBinding: false });
     if (!accParameterType || accParameterType.type === "RDTTypeUnknown") throw new Error(`Accumulator type is unknown in reducer`);
     if (!rowParameterType || rowParameterType.type === "RDTTypeUnknown") throw new Error(`Row type is uknown in reducer`);
 

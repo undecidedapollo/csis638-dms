@@ -16,7 +16,7 @@ function toSqlType(rdtType: RDTTypeDef): string {
         return "BOOLEAN";
     }
 
-    throw new Error(`Unknown RDTTypeDef type: ${debugRDTType}`);
+    throw new Error(`Unknown RDTTypeDef type: ${debugRDTType(rdtType)}`);
 }
 
 const operatorMap : Record<RDTMath["operator"], string> = {
