@@ -8,7 +8,7 @@
     "clean:out": "rm -dr out && mkdir -p out",
     "clean:pegjs": "rm -f src/dsl.cjs src/dsl.d.ts",
     "clean:tsc": "rm -rf dist",
-    "clean": "npm run clean:pegjs && npm run clean:tsc",
+    "clean": "npm run clean:out && npm run clean:pegjs && npm run clean:tsc",
     "tsc": "tsc",
     "tsx": "tsx",
     "start": "tsc --noEmit && tsx",
