@@ -21,7 +21,7 @@ npm run gen && clear && npm run clean && npm run start src/index2.ts e4.dml 6
 
 Manually run DDL Changes (`out/ddl.sql`) against postgres database.
 
-You can then run some SQL expresions to test the output:
+You can then run some SQL expressions to test the output
 ```sql
 truncate "BankAccount";
 truncate "Transaction";
